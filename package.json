@@ -8,6 +8,7 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
+    "@jakelowen/knex-graphql-filters": "git://github.com/promotedai/knex-graphql-filters.git",
     "base-64": "^0.1.0"
   },
   "scripts": {
