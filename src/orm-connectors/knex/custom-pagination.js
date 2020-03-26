@@ -1,5 +1,6 @@
 const base64 = require('base-64');
 const apolloCursorPaginationBuilder = require('../../builder');
+const { applyFilters } = require('knex-graphql-filters');
 
 const SEPARATION_TOKEN = '_*_';
 const ARRAY_DATA_SEPARATION_TOKEN = '_%_';
@@ -48,76 +49,115 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
     if (beforeOrAfter === 'after') return orderDirection === 'asc' ? '<' : '>';
     return orderDirection === 'asc' ? '>' : '<';
   };
+  const getGraphqlComparator = orderDirection => {
+    if (beforeOrAfter === 'after') return orderDirection === 'asc' ? 'lt' : 'gt';
+    return orderDirection === 'asc' ? 'gt' : 'lt';
+  };
   return (nodesAccessor, cursorOfInitialNode, {
+    idColumn = 'id',
     orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
   }) => {
     const data = getDataFromCursor(cursorOfInitialNode);
     const [id, columnValue] = data;
 
     const initialValue = nodesAccessor.clone();
-    const executeFilterQuery = query => operateOverScalarOrArray(query, orderColumn, (orderBy, index, prev) => {
-      let orderDirection;
-      const values = columnValue;
-      let currValue;
-      if (index !== null) {
-        orderDirection = ascOrDesc[index].toLowerCase();
-        currValue = values[index];
-      } else {
-        orderDirection = ascOrDesc.toLowerCase();
-        currValue = values[0];
-      }
-      const comparator = getComparator(orderDirection);
+    const executeFilterQuery = query => {
+      const filters = operateOverScalarOrArray({ OR: []}, orderColumn, (orderBy, index, prev) => {
+        let orderDirection;
+        const values = columnValue;
+        let currValue;
+        if (index !== null) {
+          orderDirection = ascOrDesc[index].toLowerCase();
+          currValue = values[index];
+        } else {
+          orderDirection = ascOrDesc.toLowerCase();
+          currValue = values[0];
+        }
+        const comparator = getComparator(orderDirection);
+        const graphqlComparator = getGraphqlComparator(orderDirection);
 
+        if (index > 0) {
+          // TODO - sanity check the sort name
+          const operation = (isAggregateFn && isAggregateFn(orderColumn[index - 1])) ? 'orHavingRaw' : 'orWhereRaw';
 
-      if (index > 0) {
-        const operation = (isAggregateFn && isAggregateFn(orderColumn[index - 1])) ? 'orHavingRaw' : 'orWhereRaw';
-        const nested = prev[operation](
-          `(${formatColumnIfAvailable(orderColumn[index - 1], formatColumnFn)} = ? and ${formatColumnIfAvailable(orderBy, formatColumnFn)} ${comparator} ?)`,
-          [values[index - 1], values[index]],
-        );
+          const prevColumn = formatColumnIfAvailable(orderColumn[index - 1], formatColumnFn);
+          const column = formatColumnIfAvailable(orderBy, formatColumnFn);
+          prev.OR.push({
+            AND: [{
+              [prevColumn]: { is: values[index - 1] },
+              [column]: { [graphqlComparator]: values[index] },
+            }],
+          });
+          return prev;
+        }
 
-        return nested;
-      }
+        if (currValue === null || currValue === undefined) {
+          return prev;
+        }
 
-      if (currValue === null || currValue === undefined) {
+        const operation = (isAggregateFn && isAggregateFn(orderBy)) ? 'havingRaw' : 'whereRaw';
+        const column = formatColumnIfAvailable(orderBy, formatColumnFn);
+
+        prev.OR.push({
+          [column]: { [graphqlComparator]: currValue },
+        });
         return prev;
-      }
+      }, (prev, isArray) => {
+        // Result is sorted by id as the last column
 
-      const operation = (isAggregateFn && isAggregateFn(orderBy)) ? 'havingRaw' : 'whereRaw';
-      return prev[operation](`(${formatColumnIfAvailable(orderBy, formatColumnFn)} ${comparator} ?)`, [currValue]);
-    }, (prev, isArray) => {
-      // Result is sorted by id as the last column
-      const comparator = getComparator(ascOrDesc);
-      const lastOrderColumn = isArray ? orderColumn.pop() : orderColumn;
-      const lastValue = columnValue.pop();
+        const comparator = getComparator(ascOrDesc);
+        const graphqlComparator = getGraphqlComparator(ascOrDesc);
+        const lastOrderColumn = isArray ? orderColumn.pop() : orderColumn;
+        const lastValue = columnValue.pop();
 
-      // If value is null, we are forced to filter by id instead
-      const operation = (isAggregateFn && isAggregateFn(lastOrderColumn)) ? 'orHavingRaw' : 'orWhereRaw';
-      if (lastValue === null || lastValue === undefined) {
-        return prev[operation](
-          `(${formatColumnIfAvailable('id', formatColumnFn)} ${comparator} ?) or (${formatColumnIfAvailable(lastOrderColumn, formatColumnFn)} IS NOT NULL)`,
-          [id],
-        );
-      }
+        // If value is null, we are forced to filter by id instead
+        const operation = (isAggregateFn && isAggregateFn(lastOrderColumn)) ? 'orHavingRaw' : 'orWhereRaw';
+        if (lastValue === null || lastValue === undefined) {
+          const idColumnName = formatColumnIfAvailable(idColumn, formatColumnFn);
+          const lastOrderColumnName = formatColumnIfAvailable(lastOrderColumn, formatColumnFn);
+          prev.OR.push({
+            [idColumnName]: { [graphqlComparator]: id },
+            [lastOrderColumnName]: { "not_null": true },
+          });
+          return prev;
+        }
 
-      return prev[operation](
-        `(${formatColumnIfAvailable(lastOrderColumn, formatColumnFn)} = ? and ${formatColumnIfAvailable('id', formatColumnFn)} ${comparator} ?)`,
-        [lastValue, id],
-      );
-    });
+        const lastOrderColumnName = formatColumnIfAvailable(lastOrderColumn, formatColumnFn);
+        const idColumnName = formatColumnIfAvailable(idColumn, formatColumnFn);
+
+        prev.OR.push({
+          AND: [
+            {
+              [lastOrderColumnName]: { "is": lastValue },
+              [idColumnName]: { [graphqlComparator]: id },
+            },
+          ],
+        });
+        return prev;
+      });
+
+      console.log("filters=" + JSON.stringify(filters))
+      return applyFilters(query, filters)
+    }
+
     let result;
+    result = executeFilterQuery(initialValue);
 
+    /*
     if ((isAggregateFn && Array.isArray(orderColumn) && isAggregateFn(orderColumn[0]))
     || (isAggregateFn && !Array.isArray(orderColumn) && isAggregateFn(orderColumn))) {
+      console.log("firstCall");
       result = executeFilterQuery(initialValue);
     } else {
+      console.log("secondCall");
       result = initialValue.andWhere(query => executeFilterQuery(query));
     }
+    */
     return result;
   };
 };
 
-const orderNodesBy = (nodesAccessor, { orderColumn = 'id', ascOrDesc = 'asc', formatColumnFn }) => {
+const orderNodesBy = (nodesAccessor, { idColumn, orderColumn = 'id', ascOrDesc = 'asc', formatColumnFn }) => {
   const initialValue = nodesAccessor.clone();
   const result = operateOverScalarOrArray(initialValue, orderColumn, (orderBy, index, prev) => {
     if (index !== null) {
@@ -125,8 +165,8 @@ const orderNodesBy = (nodesAccessor, { orderColumn = 'id', ascOrDesc = 'asc', fo
     }
     return prev.orderBy(formatColumnIfAvailable(orderBy, formatColumnFn), ascOrDesc);
   }, (prev, isArray) => (isArray
-    ? prev.orderBy(formatColumnIfAvailable('id', formatColumnFn), ascOrDesc[0])
-    : prev.orderBy(formatColumnIfAvailable('id', formatColumnFn), ascOrDesc)));
+    ? prev.orderBy(formatColumnIfAvailable(idColumn, formatColumnFn), ascOrDesc[0])
+    : prev.orderBy(formatColumnIfAvailable(idColumn, formatColumnFn), ascOrDesc)));
   return result;
 };
 
@@ -158,6 +198,7 @@ const removeNodesFromBeginning = (nodesAccessor, last, { orderColumn, ascOrDesc 
 
   const order = invertedOrderArray.length === 1 ? invertedOrderArray[0] : invertedOrderArray;
 
+  // TODO - this seems like it might be broken.
   const subquery = orderNodesBy(nodesAccessor.clone().clearOrder(), orderColumn, order).limit(last);
   const result = nodesAccessor.clone().from(subquery.as('last_subquery')).clearSelect().clearWhere();
   return result;
