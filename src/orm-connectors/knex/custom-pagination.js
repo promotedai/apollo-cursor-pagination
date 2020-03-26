@@ -58,10 +58,31 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
     orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
   }) => {
     const data = getDataFromCursor(cursorOfInitialNode);
-    const [id, columnValue] = data;
+    var [id, columnValue] = data;
 
     const initialValue = nodesAccessor.clone();
     const executeFilterQuery = query => {
+
+      // The following doc talks about how the origin branch has an incorrect multiple column implementation.
+      // https://docs.google.com/document/d/1G_7JCNgkg4avwZCojwdwSmJoFvvbr5_K4UJpRXlTq-k/edit#
+
+      // Make copies of orderColumn and ascOrDesc.  Append the id column to the end of it.
+      const isArray = Array.isArray(orderColumn);
+      if (isArray) {
+        orderColumn = [...orderColumn];
+        orderColumn.push(idColumn);
+        console.log("ascOrDesc=" + ascOrDesc);
+        ascOrDesc = [...ascOrDesc];
+        // Reuse the last column's ascOrDesc for the id columns.
+        ascOrDesc.push(ascOrDesc[ascOrDesc.length - 1]);
+        console.log("ascOrDesc=" + ascOrDesc);
+      } else {
+        orderColumn = [orderColumn, idColumn];
+        ascOrDesc = [ascOrDesc, ascOrDesc];
+      }
+      columnValue = [...columnValue];
+      columnValue.push(id);
+
       const filters = operateOverScalarOrArray({ OR: []}, orderColumn, (orderBy, index, prev) => {
         let orderDirection;
         const values = columnValue;
@@ -76,63 +97,43 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
         const comparator = getComparator(orderDirection);
         const graphqlComparator = getGraphqlComparator(orderDirection);
 
-        if (index > 0) {
-          // TODO - sanity check the sort name
-          const operation = (isAggregateFn && isAggregateFn(orderColumn[index - 1])) ? 'orHavingRaw' : 'orWhereRaw';
+        console.log("orderDirection=" + orderDirection);
+        console.log("graphqlComparator=" + graphqlComparator);
 
-          const prevColumn = formatColumnIfAvailable(orderColumn[index - 1], formatColumnFn);
-          const column = formatColumnIfAvailable(orderBy, formatColumnFn);
-          prev.OR.push({
-            AND: [{
-              [prevColumn]: { is: values[index - 1] },
-              [column]: { [graphqlComparator]: values[index] },
-            }],
-          });
-          return prev;
+        // TODO - handle having vs where.
+
+        const conditions = {};
+        // For each pass, we want the previous columns to match their value.
+        // TODO - add description for why.
+        for (var i = 0; i < index; i++) {
+          const columnName = formatColumnIfAvailable(orderColumn[i], formatColumnFn);
+          conditions[columnName] = { is: values[i] };
         }
+        // The condition for the current index should use the comparator.
+        const columnName = formatColumnIfAvailable(orderBy, formatColumnFn);
 
+        // We treat NULL as 0.  If we're trying to reach values that are
+        // not possible < NULL or > NOT NULL, skip that condition (since it's an OR).
         if (currValue === null || currValue === undefined) {
-          return prev;
+          if (orderDirection === 'desc') {
+            // With our current sorting, We can't a value less than null.
+            return prev;
+          } else {
+            // We consider "not null" to be greater than "null".
+            conditions[columnName] = { not_null: true };
+          }
+        } else {
+          conditions[columnName] = { [graphqlComparator]: currValue };
         }
 
-        const operation = (isAggregateFn && isAggregateFn(orderBy)) ? 'havingRaw' : 'whereRaw';
-        const column = formatColumnIfAvailable(orderBy, formatColumnFn);
-
-        prev.OR.push({
-          [column]: { [graphqlComparator]: currValue },
-        });
-        return prev;
-      }, (prev, isArray) => {
-        // Result is sorted by id as the last column
-
-        const comparator = getComparator(ascOrDesc);
-        const graphqlComparator = getGraphqlComparator(ascOrDesc);
-        const lastOrderColumn = isArray ? orderColumn.pop() : orderColumn;
-        const lastValue = columnValue.pop();
-
-        // If value is null, we are forced to filter by id instead
-        const operation = (isAggregateFn && isAggregateFn(lastOrderColumn)) ? 'orHavingRaw' : 'orWhereRaw';
-        if (lastValue === null || lastValue === undefined) {
-          const idColumnName = formatColumnIfAvailable(idColumn, formatColumnFn);
-          const lastOrderColumnName = formatColumnIfAvailable(lastOrderColumn, formatColumnFn);
+        if (index == 0) {
+          // We don't need wrapping parantheses.
+          prev.OR.push(conditions);
+        } else {
           prev.OR.push({
-            [idColumnName]: { [graphqlComparator]: id },
-            [lastOrderColumnName]: { "not_null": true },
+            AND: [conditions]
           });
-          return prev;
         }
-
-        const lastOrderColumnName = formatColumnIfAvailable(lastOrderColumn, formatColumnFn);
-        const idColumnName = formatColumnIfAvailable(idColumn, formatColumnFn);
-
-        prev.OR.push({
-          AND: [
-            {
-              [lastOrderColumnName]: { "is": lastValue },
-              [idColumnName]: { [graphqlComparator]: id },
-            },
-          ],
-        });
         return prev;
       });
 
@@ -165,7 +166,7 @@ const orderNodesBy = (nodesAccessor, { idColumn, orderColumn = 'id', ascOrDesc =
     }
     return prev.orderBy(formatColumnIfAvailable(orderBy, formatColumnFn), ascOrDesc);
   }, (prev, isArray) => (isArray
-    ? prev.orderBy(formatColumnIfAvailable(idColumn, formatColumnFn), ascOrDesc[0])
+    ? prev.orderBy(formatColumnIfAvailable(idColumn, formatColumnFn), ascOrDesc[ascOrDesc.length - 1])
     : prev.orderBy(formatColumnIfAvailable(idColumn, formatColumnFn), ascOrDesc)));
   return result;
 };
