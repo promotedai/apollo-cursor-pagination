@@ -14,18 +14,18 @@ const applyCursorsToNodes = (
     removeNodesBeforeAndIncluding,
     removeNodesAfterAndIncluding,
   }, {
-    orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
   },
 ) => {
   let nodesAccessor = allNodesAccessor;
   if (after) {
     nodesAccessor = removeNodesBeforeAndIncluding(nodesAccessor, after, {
-      orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
     });
   }
   if (before) {
     nodesAccessor = removeNodesAfterAndIncluding(nodesAccessor, before, {
-      orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
     });
   }
   return nodesAccessor;
@@ -51,11 +51,11 @@ const nodesToReturn = async (
   {
     before, after, first, last,
   }, {
-    orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
   },
 ) => {
   const orderedNodesAccessor = orderNodesBy(allNodesAccessor, {
-    orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
   });
   const nodesAccessor = applyCursorsToNodes(
     orderedNodesAccessor,
@@ -64,7 +64,7 @@ const nodesToReturn = async (
       removeNodesBeforeAndIncluding,
       removeNodesAfterAndIncluding,
     }, {
-      orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
     },
   );
   let hasNextPage = !!before;
@@ -110,7 +110,7 @@ const apolloCursorPaginationBuilder = ({
   opts = {},
 ) => {
   const {
-    isAggregateFn, formatColumnFn, skipTotalCount = false, modifyEdgeFn,
+    idColumn, isAggregateFn, formatColumnFn, skipTotalCount = false, modifyEdgeFn,
   } = opts;
   let {
     orderColumn, ascOrDesc,
@@ -140,7 +140,7 @@ const apolloCursorPaginationBuilder = ({
     }, {
       before, after, first, last,
     }, {
-      orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
     },
   );
 

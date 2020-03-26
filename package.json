@@ -8,11 +8,14 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@jakelowen/knex-graphql-filters": "git://github.com/promotedai/knex-graphql-filters.git",
-    "base-64": "^0.1.0"
+    "base-64": "^0.1.0",
+    "knex": "^0.20.13",
+    "knex-graphql-filters": "file:../knex-graphql-filters/",
+    "knex-stringcase": "^1.4.1"
   },
   "scripts": {
-    "build": "babel src --out-dir dist"
+    "build": "babel src --out-dir dist",
+    "test": "NODE_ENV=test jest --runInBand"
   },
   "devDependencies": {
     "@babel/cli": "^7.1.2",
@@ -25,6 +28,7 @@
     "eslint-config-airbnb-base": "^13.1.0",
     "eslint-plugin-import": "^2.14.0",
     "eslint-plugin-jest": "^21.25.0",
+    "jest": "^25.2.0",
     "regenerator-runtime": "^0.12.1"
   }
 }
