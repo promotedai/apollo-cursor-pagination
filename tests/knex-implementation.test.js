@@ -62,7 +62,7 @@ describe('test where clause', () => {
       formatColumnFn: column => {
         if (column == "metric") {
           return "sum(metric)";
-        } else if (column == "fourthColumn") {
+        } else if (column == "fourthId") {
           return "custom_forth_column";
         }
         return cachedSnakecase(column);
@@ -164,12 +164,78 @@ describe('test where clause', () => {
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
-  // TODO - null value.
+  it('multiple sorts - 4 columns - custom column rendering', async () => {
+    const queryStrings = [];
+    const cursorInput = {
+      first: 3,
+      after: base64.encode("1_*_2_%_3_%_4_%_5"),
+      orderBy: ["firstId", "secondId", "thirdId", "fourthId"],
+      orderDirection: ["desc", "asc", "desc", "asc"],
+    };
+    const query = createTestKnex();
+    await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
+    expect(queryStrings.length).toEqual(2);
+    expect(queryStrings[0])
+      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" > 3) or (\"second_id\" = 3 and \"third_id\" < 4) or (\"third_id\" = 4 and \"custom_forth_column\" > 5) or (\"custom_forth_column\" = 5 and \"backup_id\" < '1')) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"custom_forth_column\" asc, \"backup_id\" desc limit 4");
+    expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+  });
+
+  it('null value - asc', async () => {
+    const queryStrings = [];
+    const cursorInput = {
+      first: 3,
+      after: base64.encode("1_*_null"),
+      orderBy: "firstId",
+      orderDirection: "desc",
+    };
+    const query = createTestKnex();
+    await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
+    expect(queryStrings.length).toEqual(2);
+    expect(queryStrings[0])
+      .toEqual("select \"metric\" from \"mytable\" where (\"backup_id\" < '1' or \"first_id\" is not null) order by \"first_id\" desc, \"backup_id\" desc limit 4");
+
+    expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+  });
+
+  it('null value - desc', async () => {
+    const queryStrings = [];
+    const cursorInput = {
+      first: 3,
+      after: base64.encode("1_*_null"),
+      orderBy: "firstId",
+      orderDirection: "asc",
+    };
+    const query = createTestKnex();
+    await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
+    expect(queryStrings.length).toEqual(2);
+    expect(queryStrings[0])
+      .toEqual("select \"metric\" from \"mytable\" where (\"backup_id\" > '1' or \"first_id\" is not null) order by \"first_id\" asc, \"backup_id\" asc limit 4");
+
+    expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+  });
+
+  it('multiple sorts - two values, null value', async () => {
+    const queryStrings = [];
+    const cursorInput = {
+      first: 3,
+      after: base64.encode("1_*_2_%_null"),
+      orderBy: ["firstId", "secondId"],
+      orderDirection: ["desc", "asc"],
+    };
+    const query = createTestKnex();
+    await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
+    expect(queryStrings.length).toEqual(2);
+    expect(queryStrings[0])
+      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" > NULL) or \"backup_id\" < '1' or \"second_id\" is not null) order by \"first_id\" desc, \"second_id\" asc, \"backup_id\" desc limit 4");
+
+    expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+  });
+
+  // TODO - the "is not null" sorting is broken here.  Fix it.
   // TODO - having columns.
-  // TODO - formatColumn.
 
   // TODO - look at other todo.
   // TODO - which way to sort id column?
-
+  // TODO - can "_%_" and "_*_ in the values screw up the cursor?
 
 });
