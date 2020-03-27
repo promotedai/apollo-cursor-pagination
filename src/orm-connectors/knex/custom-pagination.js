@@ -2,8 +2,10 @@ const base64 = require('base-64');
 const apolloCursorPaginationBuilder = require('../../builder');
 const { applyFilters } = require('knex-graphql-filters');
 
-const SEPARATION_TOKEN = '_*_';
-const ARRAY_DATA_SEPARATION_TOKEN = '_%_';
+// We encode strings in the token using encodeURIComponent.  If the following tokens were
+// in the values, they'd be encoded.
+const SEPARATION_TOKEN = '?';
+const ARRAY_DATA_SEPARATION_TOKEN = '/';
 
 const encode = str => base64.encode(str);
 const decode = str => base64.decode(str);
@@ -33,9 +35,29 @@ const getDataFromCursor = (cursor) => {
   if (data[0] === undefined || data[1] === undefined) {
     throw new Error(`Could not find edge with cursor ${cursor}`);
   }
-  const values = data[1].split(ARRAY_DATA_SEPARATION_TOKEN).map(v => JSON.parse(v));
+  const values = data[1].split(ARRAY_DATA_SEPARATION_TOKEN).map(v => JSON.parse(decodeURIComponent(v)));
   return [data[0], values];
 };
+
+// Receives a list of nodes and returns it in edge form:
+// {
+//   cursor
+//   node
+// }
+const convertNodesToEdges = (nodes, _, {
+  orderColumn,
+}) => nodes.map((node) => {
+  const dataValue = operateOverScalarOrArray('', orderColumn, (orderBy, index, prev) => {
+    const nodeValue = node[orderBy];
+    const result = `${prev}${index ? ARRAY_DATA_SEPARATION_TOKEN : ''}${encodeURIComponent(JSON.stringify(nodeValue))}`;
+    return result;
+  });
+
+  return {
+    cursor: cursorGenerator(node.id, dataValue),
+    node,
+  };
+});
 
 const formatColumnIfAvailable = (column, formatColumnFn) => {
   if (formatColumnFn) {
@@ -201,26 +223,6 @@ const hasLengthGreaterThan = async (nodesAccessor, amount) => {
   const result = await nodesAccessor.clone().limit(amount + 1);
   return result.length === amount + 1;
 };
-
-// Receives a list of nodes and returns it in edge form:
-// {
-//   cursor
-//   node
-// }
-const convertNodesToEdges = (nodes, _, {
-  orderColumn,
-}) => nodes.map((node) => {
-  const dataValue = operateOverScalarOrArray('', orderColumn, (orderBy, index, prev) => {
-    const nodeValue = node[orderBy];
-    const result = `${prev}${index ? ARRAY_DATA_SEPARATION_TOKEN : ''}${JSON.stringify(nodeValue)}`;
-    return result;
-  });
-
-  return {
-    cursor: cursorGenerator(node.id, dataValue),
-    node,
-  };
-});
 
 const paginate = apolloCursorPaginationBuilder(
   {

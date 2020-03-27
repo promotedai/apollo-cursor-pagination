@@ -136,7 +136,7 @@ function wrapKnex(query, queryStringsOutput) {
 
 const createTestCursorInput = () => ({
   first: 3,
-  after: base64.encode("1_*_2"),
+  after: base64.encode("1?2"),
   orderBy: "firstId",
   orderDirection: "desc"
 });
@@ -195,7 +195,7 @@ describe('test where clause', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 10,
-      after: base64.encode("1_*_2"),
+      after: base64.encode("1?2"),
       orderBy: "firstId",
       orderDirection: "desc"
     };
@@ -206,11 +206,26 @@ describe('test where clause', () => {
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
+  it('string value in token', async () => {
+    const queryStrings = [];
+    const cursorInput = {
+      last: 7,
+      before: base64.encode("1?\"my%20test%2F\""),
+      orderBy: "firstId",
+      orderDirection: "desc"
+    };
+    await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
+    expect(queryStrings.length).toEqual(2);
+    expect(queryStrings[0])
+      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 'my test/' or (\"first_id\" = 'my test/' and \"backup_id\" > '1')) order by \"first_id\" desc, \"backup_id\" desc limit 8");
+    expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+  });
+
   it('before', async () => {
     const queryStrings = [];
     const cursorInput = {
       last: 7,
-      before: base64.encode("1_*_2"),
+      before: base64.encode("1?2"),
       orderBy: "firstId",
       orderDirection: "desc"
     };
@@ -250,7 +265,7 @@ describe('test where clause', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1_*_2_%_3"),
+          after: base64.encode("1?2/3"),
           orderBy: ["firstId", "secondId"],
           orderDirection: ["desc", "desc"],
         };
@@ -266,7 +281,7 @@ describe('test where clause', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1_*_2_%_3"),
+          after: base64.encode("1?2/3"),
           orderBy: ["firstId", "secondId"],
           orderDirection: ["desc", "asc"],
         };
@@ -282,7 +297,7 @@ describe('test where clause', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1_*_2_%_3"),
+          after: base64.encode("1?2/3"),
           orderBy: ["firstId", "secondId"],
           orderDirection: ["asc", "desc"],
         };
@@ -298,7 +313,7 @@ describe('test where clause', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1_*_2_%_3"),
+          after: base64.encode("1?2/3"),
           orderBy: ["firstId", "secondId"],
           orderDirection: ["asc", "asc"],
         };
@@ -315,7 +330,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_2_%_3_%_4"),
+        after: base64.encode("1?2/3/4"),
         orderBy: ["firstId", "secondId", "thirdId"],
         orderDirection: ["desc", "asc", "desc"],
       };
@@ -346,7 +361,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         last: 3,
-        before: base64.encode("1_*_2_%_3_%_4"),
+        before: base64.encode("1?2/3/4"),
         orderBy: ["firstId", "secondId", "thirdId"],
         orderDirection: ["desc", "asc", "desc"],
       };
@@ -358,11 +373,27 @@ describe('test where clause', () => {
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
+    it('3 columns - other types in tokens', async () => {
+      const queryStrings = [];
+      const cursorInput = {
+        last: 3,
+        before: base64.encode("1?2/true/\"my%20test%2F\""),
+        orderBy: ["firstId", "secondId", "thirdId"],
+        orderDirection: ["desc", "asc", "desc"],
+      };
+      const query = createTestKnex();
+      await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
+      expect(queryStrings.length).toEqual(2);
+      expect(queryStrings[0])
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < true) or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" > 'my test/') or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" = 'my test/' and \"backup_id\" > '1')) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc limit 4")
+      expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+    });
+
     it('4 columns - custom column rendering', async () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_2_%_3_%_4_%_5"),
+        after: base64.encode("1?2/3/4/5"),
         orderBy: ["firstId", "secondId", "thirdId", "fourthId"],
         orderDirection: ["desc", "asc", "desc", "asc"],
       };
@@ -380,7 +411,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_null"),
+        after: base64.encode("1?null"),
         orderBy: "firstId",
         orderDirection: "desc",
       };
@@ -396,7 +427,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_null"),
+        after: base64.encode("1?null"),
         orderBy: "firstId",
         orderDirection: "asc",
       };
@@ -412,7 +443,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_2_%_null"),
+        after: base64.encode("1?2/null"),
         orderBy: ["firstId", "secondId"],
         orderDirection: ["desc", "desc"],
       };
@@ -429,7 +460,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_2_%_null"),
+        after: base64.encode("1?2/null"),
         orderBy: ["firstId", "secondId"],
         orderDirection: ["desc", "asc"],
       };
@@ -478,7 +509,7 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1_*_2"),
+      after: base64.encode("1?2"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
@@ -493,7 +524,7 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1_*_2"),
+      after: base64.encode("1?2"),
       orderBy: ["myMetric1"],
       orderDirection: ["asc"],
     };
@@ -508,7 +539,7 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1_*_2"),
+      after: base64.encode("1?2"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
@@ -524,7 +555,7 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 10,
-      after: base64.encode("1_*_2"),
+      after: base64.encode("1?2"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
@@ -540,7 +571,7 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       last: 7,
-      before: base64.encode("1_*_2"),
+      before: base64.encode("1?2"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
@@ -556,7 +587,7 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1_*_2"),
+      after: base64.encode("1?2"),
       orderBy: ["myMetric1"],
       orderDirection: ["asc"],
     };
@@ -572,7 +603,7 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1_*_2"),
+      after: base64.encode("1?2"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
@@ -592,7 +623,7 @@ describe('having', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1_*_2_%_3"),
+          after: base64.encode("1?2/3"),
           orderBy: ["firstId", "myMetric1"],
           orderDirection: ["desc", "desc"],
         };
@@ -609,7 +640,7 @@ describe('having', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1_*_2_%_3"),
+          after: base64.encode("1?2/3"),
           orderBy: ["firstId", "myMetric1"],
           orderDirection: ["desc", "asc"],
         };
@@ -626,7 +657,7 @@ describe('having', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1_*_2_%_3"),
+          after: base64.encode("1?2/3"),
           orderBy: ["myMetric1", "firstId"],
           orderDirection: ["asc", "desc"],
         };
@@ -643,7 +674,7 @@ describe('having', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1_*_2_%_3"),
+          after: base64.encode("1?2/3"),
           orderBy: ["myMetric", "secondId"],
           orderDirection: ["asc", "asc"],
         };
@@ -661,7 +692,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_2_%_3_%_4"),
+        after: base64.encode("1?2/3/4"),
         orderBy: ["myMetric1", "myMetric2", "thirdId"],
         orderDirection: ["desc", "asc", "desc"],
       };
@@ -694,7 +725,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         last: 3,
-        before: base64.encode("1_*_2_%_3_%_4"),
+        before: base64.encode("1?2/3/4"),
         orderBy: ["myMetric1", "myMetric2", "thirdId"],
         orderDirection: ["desc", "asc", "desc"],
       };
@@ -711,7 +742,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_2_%_3_%_4_%_5"),
+        after: base64.encode("1?2/3/4/5"),
         orderBy: ["firstId", "myMetric1", "thirdId", "fourthId"],
         orderDirection: ["desc", "asc", "desc", "asc"],
       };
@@ -732,7 +763,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_null"),
+        after: base64.encode("1?null"),
         orderBy: "myMetric1",
         orderDirection: "desc",
       };
@@ -750,7 +781,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_null"),
+        after: base64.encode("1?null"),
         orderBy: "myMetric1",
         orderDirection: "asc",
       };
@@ -767,7 +798,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_2_%_null"),
+        after: base64.encode("1?2/null"),
         orderBy: ["firstId", "myMetric1"],
         orderDirection: ["desc", "desc"],
       };
@@ -784,7 +815,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1_*_2_%_null"),
+        after: base64.encode("1?2/null"),
         orderBy: ["myMetric1", "secondId"],
         orderDirection: ["desc", "asc"],
       };
@@ -798,37 +829,9 @@ describe('having', () => {
     });
   });
 
-/*
-  it('test knex having', async () => {
-    const query = createTestKnex();
-
-    query.having("x", "=", 1);
-    query.orHaving("y", "<", 2);
-    query.orHaving("z", "=", 3);
-
-    query.having(function(query) {
-      query.andWhere(function(query) {
-        query.where("x", "=", 1);
-        query.orWhere("y", "<", 2);
-      });
-      query.andWhere(function(query) {
-        query.where("z", "=", 3);
-        query.orWhere("a", "<", 4);
-      });
-    });
-    query.having(function(query) {
-      query.whereNot("x", "abc");
-    });
-
-    expect(query.toString())
-      .toEqual("");
-  });
-  */
-
   // TODO - look at other todo.
-  // TODO - can "_%_" and "_*_ in the values screw up the cursor?
 
-  // TODO - in the filter objects, should any filters on the same object be an AND?
+  // TODO - get sorting to work on true/false.
 
   // TODO - do where pagination when there is already a having.
   // TODO - do having pagination when there is already a having.
