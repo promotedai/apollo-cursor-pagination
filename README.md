@@ -1,3 +1,27 @@
+# IMPORTANT!
+
+This code has been forked and changed to actually work for cases that promoted.ai needs.
+
+Here are some of the bugs in the original implementation:
+
+1. The cursor sorting logic was [wrong for more than two columns](https://docs.google.com/document/d/1G_7JCNgkg4avwZCojwdwSmJoFvvbr5_K4UJpRXlTq-k/edit?usp=drive_web&ouid=117239387681127446188).
+
+2. Having clauses did not work correctly.  This made it impossible to use it for stats sorting.
+
+3. Backup id column sorting could not be customized and did not support multiple id columns.
+
+4. The cursor will break if '_*_' or '_%_' are in the string values.
+
+
+Dev notes:
+
+1. The original tests do not run.  I added a special test for the main file I changed (related to building SQL).
+
+2. The main adsmgr-api depends on src/.  dist/ and the build commands are not used.  I'm leaving them in case there are other issues.
+
+
+# Here are the original README notes.
+
 # Apollo Cursor Pagination
 
 Implementation of Relay's Connection specs for Apollo Server. Allows your Apollo Server to do cursor-based pagination. It can connect to any ORM, but only the connection with Knex.js is implemented currently.
