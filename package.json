@@ -10,7 +10,7 @@
   "dependencies": {
     "base-64": "^0.1.0",
     "knex": "^0.20.13",
-    "knex-graphql-filters": "file:../knex-graphql-filters/",
+    "knex-graphql-filters": "git://github.com/promotedai/knex-graphql-filters.git",
     "knex-stringcase": "^1.4.1"
   },
   "scripts": {
