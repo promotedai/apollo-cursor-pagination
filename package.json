@@ -3,7 +3,7 @@
   "version": "0.7.0",
   "description": "Relay's Connection implementation for Apollo Server GraphQL library",
   "main": "dist/index.js",
-  "repository": "https://github.com/Terminal-Systems/apollo-cursor-pagination",
+  "repository": "https://github.com/promotedai/apollo-cursor-pagination",
   "author": "Daniel Merrill <daniel@terminal.co>",
   "license": "MIT",
   "private": false,
