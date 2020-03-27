@@ -136,7 +136,7 @@ function wrapKnex(query, queryStringsOutput) {
 
 const createTestCursorInput = () => ({
   first: 3,
-  after: base64.encode("1?2"),
+  after: base64.encode("2/1"),
   orderBy: "firstId",
   orderDirection: "desc"
 });
@@ -187,7 +187,119 @@ describe('test where clause', () => {
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"backup_id\" < '1')) order by \"first_id\" desc, \"backup_id\" desc limit 4");
+      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"backup_id\" < 1)) order by \"first_id\" desc, \"backup_id\" desc limit 4");
+    expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+  });
+
+  describe('handling the id columns', () => {
+
+    it('using string IDs', async () => {
+      const queryStrings = [];
+      const cursorInput = {
+        first: 5,
+        after: base64.encode("\"2\"/\"1\""),
+        orderBy: "firstId",
+        orderDirection: "desc"
+      };
+
+      await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
+      expect(queryStrings.length).toEqual(2);
+      expect(queryStrings[0])
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < \'2\' or (\"first_id\" = \'2\' and \"backup_id\" < \'1\')) order by \"first_id\" desc, \"backup_id\" desc limit 6");
+      expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+    });
+
+    it('multiple IDs', async () => {
+      const queryStrings = [];
+      const cursorInput = {
+        first: 5,
+        after: base64.encode("\"2\"/\"1\"/\"3\""),
+        orderBy: "firstId",
+        orderDirection: "desc"
+      };
+
+      await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, ['backupId1', 'backupId2']);
+      expect(queryStrings.length).toEqual(2);
+      expect(queryStrings[0])
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < '2' or (\"first_id\" = '2' and \"backup_id1\" < '1') or (\"first_id\" = '2' and \"backup_id1\" = '1' and \"backup_id2\" < '3')) order by \"first_id\" desc, \"backup_id1\" desc, \"backup_id2\" desc limit 6")
+      expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+    });
+
+    it('de-dupe ID', async () => {
+      const queryStrings = [];
+      const cursorInput = {
+        first: 5,
+        after: base64.encode("\"2\""),
+        orderBy: "firstId",
+        orderDirection: "desc"
+      };
+
+      await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'firstId');
+      expect(queryStrings.length).toEqual(2);
+      expect(queryStrings[0])
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < \'2\') order by \"first_id\" desc limit 6");
+      expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+    });
+
+    it('multiple IDs - de-dupe one ID', async () => {
+      const queryStrings = [];
+      const cursorInput = {
+        first: 5,
+        after: base64.encode("1/\"2\""),
+        orderBy: ["firstId", "secondId"],
+        orderDirection: "desc"
+      };
+
+      await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'secondId');
+      expect(queryStrings.length).toEqual(2);
+      expect(queryStrings[0])
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 1 or (\"first_id\" = 1 and \"second_id\" < '2')) order by \"first_id\" asc, \"second_id\" asc limit 6");
+      expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+    });
+
+    it('multiple IDs - de-dupe all ID', async () => {
+      const queryStrings = [];
+      const cursorInput = {
+        first: 5,
+        after: base64.encode("1/\"2\"/\"3\""),
+        orderBy: ["firstId", "secondId", "thirdId"],
+        orderDirection: "desc"
+      };
+
+      await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, ["secondId", "thirdId", "firstId"]);
+      expect(queryStrings.length).toEqual(2);
+      expect(queryStrings[0])
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 1 or (\"first_id\" = 1 and \"second_id\" < '2') or (\"first_id\" = 1 and \"second_id\" = '2' and \"third_id\" < '3')) order by \"first_id\" asc, \"second_id\" asc, \"third_id\" asc limit 6");
+      expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+    });
+
+  });
+
+  it('asc - no after token', async () => {
+    const queryStrings = [];
+    const cursorInput = {
+      first: 5,
+      orderBy: "firstId",
+      orderDirection: "asc"
+    };
+    await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
+    expect(queryStrings.length).toEqual(2);
+    expect(queryStrings[0])
+      .toEqual("select \"metric\" from \"mytable\" order by \"first_id\" asc, \"backup_id\" asc limit 6");
+    expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
+  });
+
+  it('asc - no after token', async () => {
+    const queryStrings = [];
+    const cursorInput = {
+      first: 5,
+      orderBy: "firstId",
+      orderDirection: "asc"
+    };
+    await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
+    expect(queryStrings.length).toEqual(2);
+    expect(queryStrings[0])
+      .toEqual("select \"metric\" from \"mytable\" order by \"first_id\" asc, \"backup_id\" asc limit 6");
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
@@ -195,14 +307,14 @@ describe('test where clause', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 10,
-      after: base64.encode("1?2"),
+      after: base64.encode("2/1"),
       orderBy: "firstId",
       orderDirection: "desc"
     };
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"backup_id\" < '1')) order by \"first_id\" desc, \"backup_id\" desc limit 11");
+      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"backup_id\" < 1)) order by \"first_id\" desc, \"backup_id\" desc limit 11");
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
@@ -210,14 +322,14 @@ describe('test where clause', () => {
     const queryStrings = [];
     const cursorInput = {
       last: 7,
-      before: base64.encode("1?\"my%20test%2F\""),
+      before: base64.encode("\"my%20test%2F\"/1"),
       orderBy: "firstId",
       orderDirection: "desc"
     };
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 'my test/' or (\"first_id\" = 'my test/' and \"backup_id\" > '1')) order by \"first_id\" desc, \"backup_id\" desc limit 8");
+      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 'my test/' or (\"first_id\" = 'my test/' and \"backup_id\" > 1)) order by \"first_id\" desc, \"backup_id\" desc limit 8");
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
@@ -225,14 +337,14 @@ describe('test where clause', () => {
     const queryStrings = [];
     const cursorInput = {
       last: 7,
-      before: base64.encode("1?2"),
+      before: base64.encode("2/1"),
       orderBy: "firstId",
       orderDirection: "desc"
     };
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"backup_id\" > '1')) order by \"first_id\" desc, \"backup_id\" desc limit 8")
+      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"backup_id\" > 1)) order by \"first_id\" desc, \"backup_id\" desc limit 8")
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
@@ -243,7 +355,7 @@ describe('test where clause', () => {
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"backup_id\" > '1')) order by \"first_id\" asc, \"backup_id\" asc limit 4");
+      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"backup_id\" > 1)) order by \"first_id\" asc, \"backup_id\" asc limit 4");
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
@@ -255,7 +367,7 @@ describe('test where clause', () => {
     await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" where \"other_id\" = 'abc' and (\"first_id\" < 2 or (\"first_id\" = 2 and \"backup_id\" < '1')) order by \"first_id\" desc, \"backup_id\" desc limit 4");
+      .toEqual("select \"metric\" from \"mytable\" where \"other_id\" = 'abc' and (\"first_id\" < 2 or (\"first_id\" = 2 and \"backup_id\" < 1)) order by \"first_id\" desc, \"backup_id\" desc limit 4");
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\" where \"other_id\" = 'abc'");
   });
 
@@ -265,7 +377,7 @@ describe('test where clause', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1?2/3"),
+          after: base64.encode("2/3/1"),
           orderBy: ["firstId", "secondId"],
           orderDirection: ["desc", "desc"],
         };
@@ -273,7 +385,7 @@ describe('test where clause', () => {
         await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
         expect(queryStrings.length).toEqual(2);
         expect(queryStrings[0])
-          .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" < 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"backup_id\" < '1')) order by \"first_id\" desc, \"second_id\" desc, \"backup_id\" desc limit 4");
+          .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" < 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"backup_id\" < 1)) order by \"first_id\" desc, \"second_id\" desc, \"backup_id\" desc limit 4");
         expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
       });
 
@@ -281,7 +393,7 @@ describe('test where clause', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1?2/3"),
+          after: base64.encode("2/3/1"),
           orderBy: ["firstId", "secondId"],
           orderDirection: ["desc", "asc"],
         };
@@ -289,7 +401,7 @@ describe('test where clause', () => {
         await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
         expect(queryStrings.length).toEqual(2);
         expect(queryStrings[0])
-          .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" > 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"backup_id\" > '1')) order by \"first_id\" desc, \"second_id\" asc, \"backup_id\" asc limit 4");
+          .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" > 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"backup_id\" > 1)) order by \"first_id\" desc, \"second_id\" asc, \"backup_id\" asc limit 4");
         expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
       });
 
@@ -297,7 +409,7 @@ describe('test where clause', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1?2/3"),
+          after: base64.encode("2/3/1"),
           orderBy: ["firstId", "secondId"],
           orderDirection: ["asc", "desc"],
         };
@@ -305,7 +417,7 @@ describe('test where clause', () => {
         await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
         expect(queryStrings.length).toEqual(2);
         expect(queryStrings[0])
-          .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"backup_id\" < '1')) order by \"first_id\" asc, \"second_id\" desc, \"backup_id\" desc limit 4");
+          .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"backup_id\" < 1)) order by \"first_id\" asc, \"second_id\" desc, \"backup_id\" desc limit 4");
         expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
       });
 
@@ -313,7 +425,7 @@ describe('test where clause', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1?2/3"),
+          after: base64.encode("2/3/1"),
           orderBy: ["firstId", "secondId"],
           orderDirection: ["asc", "asc"],
         };
@@ -321,7 +433,7 @@ describe('test where clause', () => {
         await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
         expect(queryStrings.length).toEqual(2);
         expect(queryStrings[0])
-          .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" > 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"backup_id\" > '1')) order by \"first_id\" asc, \"second_id\" asc, \"backup_id\" asc limit 4");
+          .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" > 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"backup_id\" > 1)) order by \"first_id\" asc, \"second_id\" asc, \"backup_id\" asc limit 4");
         expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
       });
     });
@@ -330,7 +442,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?2/3/4"),
+        after: base64.encode("2/3/4/1"),
         orderBy: ["firstId", "secondId", "thirdId"],
         orderDirection: ["desc", "asc", "desc"],
       };
@@ -338,7 +450,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" > 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" < 4) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"backup_id\" < '1')) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" > 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" < 4) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"backup_id\" < 1)) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc limit 4");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
@@ -361,7 +473,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         last: 3,
-        before: base64.encode("1?2/3/4"),
+        before: base64.encode("2/3/4/1"),
         orderBy: ["firstId", "secondId", "thirdId"],
         orderDirection: ["desc", "asc", "desc"],
       };
@@ -369,7 +481,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" > 4) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"backup_id\" > '1')) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" > 4) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"backup_id\" > 1)) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc limit 4");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
@@ -377,7 +489,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         last: 3,
-        before: base64.encode("1?2/true/\"my%20test%2F\""),
+        before: base64.encode("2/true/\"my%20test%2F\"/1"),
         orderBy: ["firstId", "secondId", "thirdId"],
         orderDirection: ["desc", "asc", "desc"],
       };
@@ -385,7 +497,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < true) or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" > 'my test/') or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" = 'my test/' and \"backup_id\" > '1')) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc limit 4")
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < true) or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" > 'my test/') or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" = 'my test/' and \"backup_id\" > 1)) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc limit 4")
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
@@ -393,7 +505,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?2/3/4/5"),
+        after: base64.encode("2/3/4/5/1"),
         orderBy: ["firstId", "secondId", "thirdId", "fourthId"],
         orderDirection: ["desc", "asc", "desc", "asc"],
       };
@@ -401,7 +513,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" > 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" < 4) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"fourth_id\" > 5) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"fourth_id\" = 5 and \"backup_id\" > '1')) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"fourth_id\" asc, \"backup_id\" asc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" > 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" < 4) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"fourth_id\" > 5) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"fourth_id\" = 5 and \"backup_id\" > 1)) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"fourth_id\" asc, \"backup_id\" asc limit 4");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
   });
@@ -411,7 +523,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?null"),
+        after: base64.encode("null/1"),
         orderBy: "firstId",
         orderDirection: "desc",
       };
@@ -419,7 +531,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where ((\"first_id\" is null and \"backup_id\" < '1')) order by \"first_id\" desc, \"backup_id\" desc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" where ((\"first_id\" is null and \"backup_id\" < 1)) order by \"first_id\" desc, \"backup_id\" desc limit 4");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
@@ -427,7 +539,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?null"),
+        after: base64.encode("null/1"),
         orderBy: "firstId",
         orderDirection: "asc",
       };
@@ -435,7 +547,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" is not null or (\"first_id\" is null and \"backup_id\" > '1')) order by \"first_id\" asc, \"backup_id\" asc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" is not null or (\"first_id\" is null and \"backup_id\" > 1)) order by \"first_id\" asc, \"backup_id\" asc limit 4");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
@@ -443,7 +555,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?2/null"),
+        after: base64.encode("2/null/1"),
         orderBy: ["firstId", "secondId"],
         orderDirection: ["desc", "desc"],
       };
@@ -451,7 +563,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" is null and \"backup_id\" < '1')) order by \"first_id\" desc, \"second_id\" desc, \"backup_id\" desc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" is null and \"backup_id\" < 1)) order by \"first_id\" desc, \"second_id\" desc, \"backup_id\" desc limit 4");
 
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
@@ -460,7 +572,7 @@ describe('test where clause', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?2/null"),
+        after: base64.encode("2/null/1"),
         orderBy: ["firstId", "secondId"],
         orderDirection: ["desc", "asc"],
       };
@@ -468,7 +580,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" is not null) or (\"first_id\" = 2 and \"second_id\" is null and \"backup_id\" > '1')) order by \"first_id\" desc, \"second_id\" asc, \"backup_id\" asc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 2 or (\"first_id\" = 2 and \"second_id\" is not null) or (\"first_id\" = 2 and \"second_id\" is null and \"backup_id\" > 1)) order by \"first_id\" desc, \"second_id\" asc, \"backup_id\" asc limit 4");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
   });
@@ -509,14 +621,14 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1?2"),
+      after: base64.encode("2/1"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" < '1'))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4")
+      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" < 1))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4")
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
@@ -524,14 +636,14 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1?2"),
+      after: base64.encode("2/1"),
       orderBy: ["myMetric1"],
       orderDirection: ["asc"],
     };
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" > '1'))) order by \"sum(my_metric1)\" asc, \"backup_id\" asc limit 4")
+      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" asc, \"backup_id\" asc limit 4")
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
@@ -539,14 +651,14 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1?2"),
+      after: base64.encode("2/1"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" < '1'))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
+      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" < 1))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
     // TODO - The total results are wrong when there are group bys.
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
@@ -555,14 +667,14 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 10,
-      after: base64.encode("1?2"),
+      after: base64.encode("2/1"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" < '1'))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 11");
+      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" < 1))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 11");
     // TODO - The total results are wrong when there are group bys.
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
@@ -571,14 +683,14 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       last: 7,
-      before: base64.encode("1?2"),
+      before: base64.encode("2/1"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" > '1'))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 8");
+      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 8");
     // TODO - The total results are wrong when there are group bys.
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
@@ -587,14 +699,14 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1?2"),
+      after: base64.encode("2/1"),
       orderBy: ["myMetric1"],
       orderDirection: ["asc"],
     };
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" > '1'))) order by \"sum(my_metric1)\" asc, \"backup_id\" asc limit 4");
+      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" asc, \"backup_id\" asc limit 4");
     // TODO - The total results are wrong when there are group bys.
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
@@ -603,7 +715,7 @@ describe('having', () => {
     const queryStrings = [];
     const cursorInput = {
       first: 3,
-      after: base64.encode("1?2"),
+      after: base64.encode("2/1"),
       orderBy: ["myMetric1"],
       orderDirection: ["desc"],
     };
@@ -612,7 +724,7 @@ describe('having', () => {
     await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" where \"other_id\" = 'abc' having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" < '1'))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
+      .toEqual("select \"metric\" from \"mytable\" where \"other_id\" = 'abc' having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" < 1))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
     // TODO - The total results are wrong when there are group bys.
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\" where \"other_id\" = 'abc'");
   });
@@ -623,7 +735,7 @@ describe('having', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1?2/3"),
+          after: base64.encode("2/3/1"),
           orderBy: ["firstId", "myMetric1"],
           orderDirection: ["desc", "desc"],
         };
@@ -631,7 +743,7 @@ describe('having', () => {
         await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
         expect(queryStrings.length).toEqual(2);
         expect(queryStrings[0])
-          .toEqual("select \"metric\" from \"mytable\" having ((\"first_id\" < 2 or (\"first_id\" = 2 and \"sum(my_metric1)\" < 3) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"backup_id\" < '1'))) order by \"first_id\" desc, \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
+          .toEqual("select \"metric\" from \"mytable\" having ((\"first_id\" < 2 or (\"first_id\" = 2 and \"sum(my_metric1)\" < 3) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"backup_id\" < 1))) order by \"first_id\" desc, \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
         // TODO - The total results are wrong when there are group bys.
         expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
       });
@@ -640,7 +752,7 @@ describe('having', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1?2/3"),
+          after: base64.encode("2/3/1"),
           orderBy: ["firstId", "myMetric1"],
           orderDirection: ["desc", "asc"],
         };
@@ -648,7 +760,7 @@ describe('having', () => {
         await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
         expect(queryStrings.length).toEqual(2);
         expect(queryStrings[0])
-          .toEqual("select \"metric\" from \"mytable\" having ((\"first_id\" < 2 or (\"first_id\" = 2 and \"sum(my_metric1)\" > 3) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"backup_id\" > '1'))) order by \"first_id\" desc, \"sum(my_metric1)\" asc, \"backup_id\" asc limit 4");
+          .toEqual("select \"metric\" from \"mytable\" having ((\"first_id\" < 2 or (\"first_id\" = 2 and \"sum(my_metric1)\" > 3) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"backup_id\" > 1))) order by \"first_id\" desc, \"sum(my_metric1)\" asc, \"backup_id\" asc limit 4");
         // TODO - The total results are wrong when there are group bys.
         expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
       });
@@ -657,7 +769,7 @@ describe('having', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1?2/3"),
+          after: base64.encode("2/3/1"),
           orderBy: ["myMetric1", "firstId"],
           orderDirection: ["asc", "desc"],
         };
@@ -665,7 +777,7 @@ describe('having', () => {
         await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
         expect(queryStrings.length).toEqual(2);
         expect(queryStrings[0])
-          .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"first_id\" < 3) or (\"sum(my_metric1)\" = 2 and \"first_id\" = 3 and \"backup_id\" < '1'))) order by \"sum(my_metric1)\" asc, \"first_id\" desc, \"backup_id\" desc limit 4");
+          .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"first_id\" < 3) or (\"sum(my_metric1)\" = 2 and \"first_id\" = 3 and \"backup_id\" < 1))) order by \"sum(my_metric1)\" asc, \"first_id\" desc, \"backup_id\" desc limit 4");
         // TODO - The total results are wrong when there are group bys.
         expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
       });
@@ -674,7 +786,7 @@ describe('having', () => {
         const queryStrings = [];
         const cursorInput = {
           first: 3,
-          after: base64.encode("1?2/3"),
+          after: base64.encode("2/3/1"),
           orderBy: ["myMetric", "secondId"],
           orderDirection: ["asc", "asc"],
         };
@@ -682,7 +794,7 @@ describe('having', () => {
         await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
         expect(queryStrings.length).toEqual(2);
         expect(queryStrings[0])
-          .toEqual("select \"metric\" from \"mytable\" where (\"my_metric\" > 2 or (\"my_metric\" = 2 and \"second_id\" > 3) or (\"my_metric\" = 2 and \"second_id\" = 3 and \"backup_id\" > '1')) order by \"my_metric\" asc, \"second_id\" asc, \"backup_id\" asc limit 4");
+          .toEqual("select \"metric\" from \"mytable\" where (\"my_metric\" > 2 or (\"my_metric\" = 2 and \"second_id\" > 3) or (\"my_metric\" = 2 and \"second_id\" = 3 and \"backup_id\" > 1)) order by \"my_metric\" asc, \"second_id\" asc, \"backup_id\" asc limit 4");
         // TODO - The total results are wrong when there are group bys.
         expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
       });
@@ -692,7 +804,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?2/3/4"),
+        after: base64.encode("2/3/4/1"),
         orderBy: ["myMetric1", "myMetric2", "thirdId"],
         orderDirection: ["desc", "asc", "desc"],
       };
@@ -700,7 +812,7 @@ describe('having', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" > 3) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" < 4) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" = 4 and \"backup_id\" < '1'))) order by \"sum(my_metric1)\" desc, \"sum(my_metric2)\" asc, \"third_id\" desc, \"backup_id\" desc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" > 3) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" < 4) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" = 4 and \"backup_id\" < 1))) order by \"sum(my_metric1)\" desc, \"sum(my_metric2)\" asc, \"third_id\" desc, \"backup_id\" desc limit 4");
       // TODO - The total results are wrong when there are group bys.
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
@@ -725,7 +837,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         last: 3,
-        before: base64.encode("1?2/3/4"),
+        before: base64.encode("2/3/4/1"),
         orderBy: ["myMetric1", "myMetric2", "thirdId"],
         orderDirection: ["desc", "asc", "desc"],
       };
@@ -733,7 +845,7 @@ describe('having', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" < 3) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" > 4) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" = 4 and \"backup_id\" > '1'))) order by \"sum(my_metric1)\" desc, \"sum(my_metric2)\" asc, \"third_id\" desc, \"backup_id\" desc limit 4")
+        .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" < 3) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" > 4) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" = 4 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" desc, \"sum(my_metric2)\" asc, \"third_id\" desc, \"backup_id\" desc limit 4")
       // TODO - The total results are wrong when there are group bys.
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
@@ -742,7 +854,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?2/3/4/5"),
+        after: base64.encode("2/3/4/5/1"),
         orderBy: ["firstId", "myMetric1", "thirdId", "fourthId"],
         orderDirection: ["desc", "asc", "desc", "asc"],
       };
@@ -750,7 +862,7 @@ describe('having', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" having ((\"first_id\" < 2 or (\"first_id\" = 2 and \"sum(my_metric1)\" > 3) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"third_id\" < 4) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"third_id\" = 4 and \"fourth_id\" > 5) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"third_id\" = 4 and \"fourth_id\" = 5 and \"backup_id\" > '1'))) order by \"first_id\" desc, \"sum(my_metric1)\" asc, \"third_id\" desc, \"fourth_id\" asc, \"backup_id\" asc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" having ((\"first_id\" < 2 or (\"first_id\" = 2 and \"sum(my_metric1)\" > 3) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"third_id\" < 4) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"third_id\" = 4 and \"fourth_id\" > 5) or (\"first_id\" = 2 and \"sum(my_metric1)\" = 3 and \"third_id\" = 4 and \"fourth_id\" = 5 and \"backup_id\" > 1))) order by \"first_id\" desc, \"sum(my_metric1)\" asc, \"third_id\" desc, \"fourth_id\" asc, \"backup_id\" asc limit 4");
       // TODO - The total results are wrong when there are group bys.
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
@@ -763,7 +875,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?null"),
+        after: base64.encode("null/1"),
         orderBy: "myMetric1",
         orderDirection: "desc",
       };
@@ -771,7 +883,7 @@ describe('having', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" having (((\"sum(my_metric1)\" is null and \"backup_id\" < '1'))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" having (((\"sum(my_metric1)\" is null and \"backup_id\" < 1))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
       // TODO - The total results are wrong when there are group bys.
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
@@ -781,7 +893,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?null"),
+        after: base64.encode("null/1"),
         orderBy: "myMetric1",
         orderDirection: "asc",
       };
@@ -789,7 +901,7 @@ describe('having', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" is not null or (\"sum(my_metric1)\" is null and \"backup_id\" > '1'))) order by \"sum(my_metric1)\" asc, \"backup_id\" asc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" is not null or (\"sum(my_metric1)\" is null and \"backup_id\" > 1))) order by \"sum(my_metric1)\" asc, \"backup_id\" asc limit 4");
       // TODO - The total results are wrong when there are group bys.
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
@@ -798,7 +910,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?2/null"),
+        after: base64.encode("2/null/1"),
         orderBy: ["firstId", "myMetric1"],
         orderDirection: ["desc", "desc"],
       };
@@ -806,7 +918,7 @@ describe('having', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" having ((\"first_id\" < 2 or (\"first_id\" = 2 and \"sum(my_metric1)\" is null and \"backup_id\" < '1'))) order by \"first_id\" desc, \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" having ((\"first_id\" < 2 or (\"first_id\" = 2 and \"sum(my_metric1)\" is null and \"backup_id\" < 1))) order by \"first_id\" desc, \"sum(my_metric1)\" desc, \"backup_id\" desc limit 4");
       // TODO - The total results are wrong when there are group bys.
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
@@ -815,7 +927,7 @@ describe('having', () => {
       const queryStrings = [];
       const cursorInput = {
         first: 3,
-        after: base64.encode("1?2/null"),
+        after: base64.encode("2/null/1"),
         orderBy: ["myMetric1", "secondId"],
         orderDirection: ["desc", "asc"],
       };
@@ -823,15 +935,14 @@ describe('having', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"second_id\" is not null) or (\"sum(my_metric1)\" = 2 and \"second_id\" is null and \"backup_id\" > '1'))) order by \"sum(my_metric1)\" desc, \"second_id\" asc, \"backup_id\" asc limit 4");
+        .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" < 2 or (\"sum(my_metric1)\" = 2 and \"second_id\" is not null) or (\"sum(my_metric1)\" = 2 and \"second_id\" is null and \"backup_id\" > 1))) order by \"sum(my_metric1)\" desc, \"second_id\" asc, \"backup_id\" asc limit 4");
       // TODO - The total results are wrong when there are group bys.
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
   });
 
-  // TODO - look at other todo.
-
   // TODO - get sorting to work on true/false.
+  // TODO - make sure bigint IDs work.
 
   // TODO - do where pagination when there is already a having.
   // TODO - do having pagination when there is already a having.
