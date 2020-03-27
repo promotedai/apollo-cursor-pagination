@@ -72,7 +72,7 @@ const nodesToReturn = async (
   let nodes = [];
   if (first) {
     if (first < 0) throw new Error('`first` argument must not be less than 0');
-    nodes = await removeNodesFromEnd(nodesAccessor, first + 1, { orderColumn, ascOrDesc });
+    nodes = await removeNodesFromEnd(nodesAccessor, first + 1, { idColumn, orderColumn, ascOrDesc, formatColumnFn });
     if (nodes.length > first) {
       hasNextPage = true;
       nodes = nodes.slice(0, first);
@@ -80,7 +80,7 @@ const nodesToReturn = async (
   }
   if (last) {
     if (last < 0) throw new Error('`last` argument must not be less than 0');
-    nodes = await removeNodesFromBeginning(nodesAccessor, last + 1, { orderColumn, ascOrDesc });
+    nodes = await removeNodesFromBeginning(nodesAccessor, last + 1, { idColumn, orderColumn, ascOrDesc, formatColumnFn });
     if (nodes.length > last) {
       hasPreviousPage = true;
       nodes = nodes.slice(1);
