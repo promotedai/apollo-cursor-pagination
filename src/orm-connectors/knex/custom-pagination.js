@@ -6,8 +6,17 @@ const { applyFilters } = require('knex-graphql-filters');
 // in the values, they'd be encoded.
 const SEPARATION_TOKEN = '/';
 
-const encode = str => base64.encode(str);
-const decode = str => base64.decode(str);
+const encode = str => {
+  return base64.encode(str);
+}
+const decode = str => {
+  try {
+    return base64.decode(str);
+  } catch (err) {
+    throw Error(`Bad decode=${str}`);
+  }
+}
+
 
 // TODO - this can probably be removed to make the code easier to read.
 const operateOverScalarOrArray = (initialValue, scalarOrArray, operation, operateResult) => {
@@ -27,8 +36,6 @@ const operateOverScalarOrArray = (initialValue, scalarOrArray, operation, operat
   return result;
 };
 
-const cursorGenerator = (id, customColumnValue) => encode(`${id}${SEPARATION_TOKEN}${customColumnValue}`);
-
 const getDataFromCursor = (cursor) => {
   const decodedCursor = decode(cursor);
   return decodedCursor.split(SEPARATION_TOKEN).map(v => JSON.parse(decodeURIComponent(v)));
@@ -44,11 +51,11 @@ const convertNodesToEdges = (nodes, _, {
   orderColumn,
 }) => nodes.map((node) => {
   orderColumn = combineOrderColumn(orderColumn, idColumn);
-  const cursor = operateOverScalarOrArray('', orderColumn, (orderBy, index, prev) => {
+  const cursor = encode(operateOverScalarOrArray('', orderColumn, (orderBy, index, prev) => {
     const nodeValue = node[orderBy];
     const result = `${prev}${index ? SEPARATION_TOKEN : ''}${encodeURIComponent(JSON.stringify(nodeValue))}`;
     return result;
-  });
+  }));
 
   return {
     cursor,
