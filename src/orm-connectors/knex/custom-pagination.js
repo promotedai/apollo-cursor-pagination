@@ -60,7 +60,6 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
     const data = getDataFromCursor(cursorOfInitialNode);
     var [id, columnValue] = data;
 
-    const initialValue = nodesAccessor.clone();
     const executeFilterQuery = query => {
 
       // The following doc talks about how the origin branch has an incorrect multiple column implementation.
@@ -71,11 +70,9 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
       if (isArray) {
         orderColumn = [...orderColumn];
         orderColumn.push(idColumn);
-        console.log("ascOrDesc=" + ascOrDesc);
         ascOrDesc = [...ascOrDesc];
         // Reuse the last column's ascOrDesc for the id columns.
         ascOrDesc.push(ascOrDesc[ascOrDesc.length - 1]);
-        console.log("ascOrDesc=" + ascOrDesc);
       } else {
         orderColumn = [orderColumn, idColumn];
         ascOrDesc = [ascOrDesc, ascOrDesc];
@@ -96,9 +93,6 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
         }
         const comparator = getComparator(orderDirection);
         const graphqlComparator = getGraphqlComparator(orderDirection);
-
-        console.log("orderDirection=" + orderDirection);
-        console.log("graphqlComparator=" + graphqlComparator);
 
         // TODO - handle having vs where.
 
@@ -137,24 +131,16 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
         return prev;
       });
 
-      console.log("filters=" + JSON.stringify(filters))
-      return applyFilters(query, filters)
+      const areAnyColumnsAggregates =
+        orderColumn.reduce((accumulator, currentColumn) => accumulator || isAggregateFn(currentColumn), false);
+      const opts = {};
+      if (areAnyColumnsAggregates) {
+        opts.having = true;
+      }
+      return applyFilters(query, filters, opts);
     }
 
-    let result;
-    result = executeFilterQuery(initialValue);
-
-    /*
-    if ((isAggregateFn && Array.isArray(orderColumn) && isAggregateFn(orderColumn[0]))
-    || (isAggregateFn && !Array.isArray(orderColumn) && isAggregateFn(orderColumn))) {
-      console.log("firstCall");
-      result = executeFilterQuery(initialValue);
-    } else {
-      console.log("secondCall");
-      result = initialValue.andWhere(query => executeFilterQuery(query));
-    }
-    */
-    return result;
+    return executeFilterQuery(nodesAccessor.clone());
   };
 };
 
