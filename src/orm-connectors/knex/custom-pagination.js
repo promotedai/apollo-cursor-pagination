@@ -6,17 +6,8 @@ const { applyFilters } = require('knex-graphql-filters');
 // in the values, they'd be encoded.
 const SEPARATION_TOKEN = '/';
 
-const encode = str => {
-  return base64.encode(str);
-}
-const decode = str => {
-  try {
-    return base64.decode(str);
-  } catch (err) {
-    throw Error(`Bad decode=${str}`);
-  }
-}
-
+const encode = str => base64.encode(str);
+const decode = str => base64.decode(str);
 
 // TODO - this can probably be removed to make the code easier to read.
 const operateOverScalarOrArray = (initialValue, scalarOrArray, operation, operateResult) => {
@@ -238,14 +229,19 @@ const removeNodesAfterAndIncluding = buildRemoveNodesFromBeforeOrAfter('after');
 // It must remove nodes from the result set starting from the beginning until it's of size `length`.
 // e.g. let [A, B, C, D] be the `resultSet`
 // removeNodesFromBeginning(resultSet, 3) should return [B, C, D]
-const removeNodesFromBeginning = async (nodesAccessor, last, { orderColumn, ascOrDesc }) => {
-  // When doing a 'before', the underly query sorts get flipped.  We don't want the results to be flipped though when the results are returned.
-  // E.g. think about how this will be used.  Someone is paging through results and wants to go to the previous page.  They want the overall
-  // sort to be the same regardless of their direction.
-  //
-  // So what we'll do is we'll use the 'before's flipped results and flip them back on the client side.
-  const nodes = await nodesAccessor.clone().limit(last);
-  return [...nodes].reverse();
+const removeNodesFromBeginning = async (nodesAccessor, last, { idColumn, orderColumn, ascOrDesc, formatColumnFn }) => {
+
+  // Flip the sort ordering.
+  const inverseAscOrDesc = operateOverScalarOrArray([], ascOrDesc,
+    (orderDirection, index, prev) => prev.concat(orderDirection === 'asc' ? 'desc' : 'asc'));
+
+  // TODO - I don't know how this works.
+  //  We don't need the idColumn
+  const subquery = orderNodesBy(nodesAccessor.clone().clearOrder(), { idColumn, orderColumn, ascOrDesc: inverseAscOrDesc, formatColumnFn}).limit(last);
+
+  const result = nodesAccessor.clone().from(subquery.as('last_subquery')).clearSelect().clearWhere();
+
+  return result;
 };
 
 
