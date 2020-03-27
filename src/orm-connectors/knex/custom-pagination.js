@@ -45,11 +45,7 @@ const formatColumnIfAvailable = (column, formatColumnFn) => {
 };
 
 const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
-  const getComparator = (orderDirection) => {
-    if (beforeOrAfter === 'after') return orderDirection === 'asc' ? '<' : '>';
-    return orderDirection === 'asc' ? '>' : '<';
-  };
-  const getGraphqlComparator = orderDirection => {
+  const getComparator = orderDirection => {
     if (beforeOrAfter === 'after') return orderDirection === 'asc' ? 'lt' : 'gt';
     return orderDirection === 'asc' ? 'gt' : 'lt';
   };
@@ -91,8 +87,6 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
           orderDirection = ascOrDesc.toLowerCase();
           currValue = values[0];
         }
-        const comparator = getComparator(orderDirection);
-        const graphqlComparator = getGraphqlComparator(orderDirection);
 
         // TODO - handle having vs where.
 
@@ -117,7 +111,8 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
             conditions[columnName] = { not_null: true };
           }
         } else {
-          conditions[columnName] = { [graphqlComparator]: currValue };
+          const comparator = getComparator(orderDirection);
+          conditions[columnName] = { [comparator]: currValue };
         }
 
         if (index == 0) {
@@ -145,6 +140,8 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
 };
 
 const orderNodesBy = (nodesAccessor, { idColumn, orderColumn = 'id', ascOrDesc = 'asc', formatColumnFn }) => {
+
+  console.log(`orderColumn=${orderColumn}`);
   const initialValue = nodesAccessor.clone();
   const result = operateOverScalarOrArray(initialValue, orderColumn, (orderBy, index, prev) => {
     if (index !== null) {
@@ -179,16 +176,14 @@ const removeNodesAfterAndIncluding = buildRemoveNodesFromBeforeOrAfter('after');
 // It must remove nodes from the result set starting from the beginning until it's of size `length`.
 // e.g. let [A, B, C, D] be the `resultSet`
 // removeNodesFromBeginning(resultSet, 3) should return [B, C, D]
-const removeNodesFromBeginning = (nodesAccessor, last, { orderColumn, ascOrDesc }) => {
-  const invertedOrderArray = operateOverScalarOrArray([], ascOrDesc,
-    (orderDirection, index, prev) => prev.concat(orderDirection === 'asc' ? 'desc' : 'asc'));
-
-  const order = invertedOrderArray.length === 1 ? invertedOrderArray[0] : invertedOrderArray;
-
-  // TODO - this seems like it might be broken.
-  const subquery = orderNodesBy(nodesAccessor.clone().clearOrder(), orderColumn, order).limit(last);
-  const result = nodesAccessor.clone().from(subquery.as('last_subquery')).clearSelect().clearWhere();
-  return result;
+const removeNodesFromBeginning = async (nodesAccessor, last, { orderColumn, ascOrDesc }) => {
+  // When doing a 'before', the underly query sorts get flipped.  We don't want the results to be flipped though when the results are returned.
+  // E.g. think about how this will be used.  Someone is paging through results and wants to go to the previous page.  They want the overall
+  // sort to be the same regardless of their direction.
+  //
+  // So what we'll do is we'll use the 'before's flipped results and flip them back on the client side.
+  const nodes = await nodesAccessor.clone().limit(last);
+  return [...nodes].reverse();
 };
 
 
