@@ -63,61 +63,53 @@ const formatColumnIfAvailable = (column, formatColumnFn) => {
   return column;
 };
 
-// Returns true if we find findColumn in orderColumn.
-const idContains = (orderColumn, findSingleColumn) => {
-  if (Array.isArray(orderColumn)) {
-    return orderColumn.includes(findSingleColumn);
+const asArray = (arr) => {
+  if (Array.isArray(arr)) {
+    return arr;
   } else {
-    return orderColumn === findSingleColumn;
+    return [arr];
   }
 }
 
+const copyAsArray = (arr) => {
+  if (Array.isArray(arr)) {
+    return [...arr];
+  } else {
+    return [arr];
+  }
+}
+
+// Returns true if we find findColumn in orderColumn.
+const idContains = (orderColumns, findSingleColumn) => {
+  return orderColumns.includes(findSingleColumn);
+}
+
 const combineOrderColumn = (orderColumn, idColumn) => {
-  var result;
-  if (Array.isArray(orderColumn)) {
-    result = [...orderColumn];
-  } else {
-    result = [orderColumn];
-  }
-  if (Array.isArray(idColumn)) {
-    if (!idContains(orderColumn, idColumn)) {
-      result.push(idColumn);
+  var results = copyAsArray(orderColumn);
+  asArray(idColumn).forEach((idCol) => {
+    if (!idContains(orderColumn, idCol)) {
+      results.push(idCol);
     }
-  } else {
-    idColumn.forEach((idCol) => {
-      if (!idContains(orderColumn, idCol)) {
-        result.push(idCol);
-      }
-    });
-  }
+  });
   return results;
 }
 
 // Do a combined version since we de-dupe for both results.
 // This returns a tuple array with both orderColumn and ascOrDesc.
 const combineOrderColumnAndAscOrDesc = (orderColumn, idColumn, ascOrDesc) => {
-  var resultOrderColumns;
-  var resultAscOrDesc;
-  if (Array.isArray(orderColumn)) {
-    resultOrderColumns = [...orderColumn];
-    resultAscOrDesc = [...ascOrDesc];
-  } else {
-    resultOrderColumns = [orderColumn];
-    resultAscOrDesc = [ascOrDesc];
-  }
+  var resultOrderColumns = copyAsArray(orderColumn);
+  var resultAscOrDesc = copyAsArray(ascOrDesc);
   const lastAscOrDesc = resultAscOrDesc[resultAscOrDesc.length - 1];
-  if (Array.isArray(idColumn)) {
-    idColumn.forEach((idCol) => {
-      if (!idContains(orderColumn, idCol)) {
-        resultOrderColumns.push(idCol);
-        resultAscOrDesc.push(lastAscOrDesc);
-      }
-    });
-  } else {
-    if (!idContains(orderColumn, idColumn)) {
-      resultOrderColumns.push(idColumn);
+  asArray(idColumn).forEach((idCol) => {
+    if (!idContains(resultOrderColumns, idCol)) {
+      resultOrderColumns.push(idCol);
       resultAscOrDesc.push(lastAscOrDesc);
     }
+  });
+
+  if (resultOrderColumns.length != resultAscOrDesc.length) {
+    console.log(`resultOrderColumns=${resultOrderColumns}`);
+    console.log(`resultAscOrDesc=${resultAscOrDesc}`);
   }
   return [resultOrderColumns, resultAscOrDesc];
 }

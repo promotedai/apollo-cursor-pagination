@@ -15,10 +15,22 @@ Here are some of the bugs in the original implementation:
 
 Dev notes:
 
-1. The original tests do not run.  I added a special test for the main file I changed (related to building SQL).
+1. The main adsmgr-api depends on src/.  dist/ and the build commands are not used.  I'm leaving them in case there are other issues.
 
-2. The main adsmgr-api depends on src/.  dist/ and the build commands are not used.  I'm leaving them in case there are other issues.
+# Testing
 
+The original tests do not run.  I added a special test for the main file I changed (related to building SQL).
+
+Run `yarn test tests/knex-implementation.test.js --watch`.
+
+You can run the adsmgr-api tests using a local version of the library by doing the following:
+
+1. Go to adsmgr-api/package.json and change the `apollo-cursor-pagination` path to `"apollo-cursor-pagination": "file:../apollo-cursor-pagination",`
+
+2. Run `yarn`.  This imports the local changes once.  If you update the pagination library again, yarn will still have the old src.
+
+3. Run tests.
+    
 
 # Here are the original README notes.
 

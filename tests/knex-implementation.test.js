@@ -247,13 +247,13 @@ describe('test where clause', () => {
         first: 5,
         after: base64.encode("1/\"2\""),
         orderBy: ["firstId", "secondId"],
-        orderDirection: "desc"
+        orderDirection: ["desc", "asc"],
       };
 
       await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'secondId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 1 or (\"first_id\" = 1 and \"second_id\" < '2')) order by \"first_id\" asc, \"second_id\" asc limit 6");
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 1 or (\"first_id\" = 1 and \"second_id\" > '2')) order by \"first_id\" desc, \"second_id\" asc limit 6");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
@@ -263,13 +263,13 @@ describe('test where clause', () => {
         first: 5,
         after: base64.encode("1/\"2\"/\"3\""),
         orderBy: ["firstId", "secondId", "thirdId"],
-        orderDirection: "desc"
+        orderDirection: ["desc", "asc", "asc"],
       };
 
       await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, ["secondId", "thirdId", "firstId"]);
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 1 or (\"first_id\" = 1 and \"second_id\" < '2') or (\"first_id\" = 1 and \"second_id\" = '2' and \"third_id\" < '3')) order by \"first_id\" asc, \"second_id\" asc, \"third_id\" asc limit 6");
+        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" < 1 or (\"first_id\" = 1 and \"second_id\" > '2') or (\"first_id\" = 1 and \"second_id\" = '2' and \"third_id\" > '3')) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" asc limit 6");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
