@@ -4,12 +4,12 @@ const { applyFilters } = require('knex-graphql-filters');
 
 // We encode strings in the token using encodeURIComponent.  If the following tokens were
 // in the values, they'd be encoded.
-const SEPARATION_TOKEN = '?';
-const ARRAY_DATA_SEPARATION_TOKEN = '/';
+const SEPARATION_TOKEN = '/';
 
 const encode = str => base64.encode(str);
 const decode = str => base64.decode(str);
 
+// TODO - this can probably be removed to make the code easier to read.
 const operateOverScalarOrArray = (initialValue, scalarOrArray, operation, operateResult) => {
   let result = initialValue;
   const isArray = Array.isArray(scalarOrArray);
@@ -31,12 +31,7 @@ const cursorGenerator = (id, customColumnValue) => encode(`${id}${SEPARATION_TOK
 
 const getDataFromCursor = (cursor) => {
   const decodedCursor = decode(cursor);
-  const data = decodedCursor.split(SEPARATION_TOKEN);
-  if (data[0] === undefined || data[1] === undefined) {
-    throw new Error(`Could not find edge with cursor ${cursor}`);
-  }
-  const values = data[1].split(ARRAY_DATA_SEPARATION_TOKEN).map(v => JSON.parse(decodeURIComponent(v)));
-  return [data[0], values];
+  return decodedCursor.split(SEPARATION_TOKEN).map(v => JSON.parse(decodeURIComponent(v)));
 };
 
 // Receives a list of nodes and returns it in edge form:
@@ -45,16 +40,18 @@ const getDataFromCursor = (cursor) => {
 //   node
 // }
 const convertNodesToEdges = (nodes, _, {
+  idColumn,
   orderColumn,
 }) => nodes.map((node) => {
-  const dataValue = operateOverScalarOrArray('', orderColumn, (orderBy, index, prev) => {
+  orderColumn = combineOrderColumn(orderColumn, idColumn);
+  const cursor = operateOverScalarOrArray('', orderColumn, (orderBy, index, prev) => {
     const nodeValue = node[orderBy];
-    const result = `${prev}${index ? ARRAY_DATA_SEPARATION_TOKEN : ''}${encodeURIComponent(JSON.stringify(nodeValue))}`;
+    const result = `${prev}${index ? SEPARATION_TOKEN : ''}${encodeURIComponent(JSON.stringify(nodeValue))}`;
     return result;
   });
 
   return {
-    cursor: cursorGenerator(node.id, dataValue),
+    cursor,
     node,
   };
 });
@@ -66,6 +63,66 @@ const formatColumnIfAvailable = (column, formatColumnFn) => {
   return column;
 };
 
+// Returns true if we find findColumn in orderColumn.
+const idContains = (orderColumn, findSingleColumn) => {
+  if (Array.isArray(orderColumn)) {
+    return orderColumn.includes(findSingleColumn);
+  } else {
+    return orderColumn === findSingleColumn;
+  }
+}
+
+const combineOrderColumn = (orderColumn, idColumn) => {
+  var result;
+  if (Array.isArray(orderColumn)) {
+    result = [...orderColumn];
+  } else {
+    result = [orderColumn];
+  }
+  if (Array.isArray(idColumn)) {
+    if (!idContains(orderColumn, idColumn)) {
+      result.push(idColumn);
+    }
+  } else {
+    idColumn.forEach((idCol) => {
+      if (!idContains(orderColumn, idCol)) {
+        result.push(idCol);
+      }
+    });
+  }
+  return results;
+}
+
+// Do a combined version since we de-dupe for both results.
+// This returns a tuple array with both orderColumn and ascOrDesc.
+const combineOrderColumnAndAscOrDesc = (orderColumn, idColumn, ascOrDesc) => {
+  var resultOrderColumns;
+  var resultAscOrDesc;
+  if (Array.isArray(orderColumn)) {
+    resultOrderColumns = [...orderColumn];
+    resultAscOrDesc = [...ascOrDesc];
+  } else {
+    resultOrderColumns = [orderColumn];
+    resultAscOrDesc = [ascOrDesc];
+  }
+  const lastAscOrDesc = resultAscOrDesc[resultAscOrDesc.length - 1];
+  if (Array.isArray(idColumn)) {
+    idColumn.forEach((idCol) => {
+      if (!idContains(orderColumn, idCol)) {
+        resultOrderColumns.push(idCol);
+        resultAscOrDesc.push(lastAscOrDesc);
+      }
+    });
+  } else {
+    if (!idContains(orderColumn, idColumn)) {
+      resultOrderColumns.push(idColumn);
+      resultAscOrDesc.push(lastAscOrDesc);
+    }
+  }
+  return [resultOrderColumns, resultAscOrDesc];
+}
+
+
 const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
   const getComparator = orderDirection => {
     if (beforeOrAfter === 'after') return orderDirection === 'asc' ? 'lt' : 'gt';
@@ -75,39 +132,25 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
     idColumn = 'id',
     orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
   }) => {
-    const data = getDataFromCursor(cursorOfInitialNode);
-    var [id, columnValue] = data;
+    const cursorValues = getDataFromCursor(cursorOfInitialNode);
 
     const executeFilterQuery = query => {
 
       // The following doc talks about how the origin branch has an incorrect multiple column implementation.
       // https://docs.google.com/document/d/1G_7JCNgkg4avwZCojwdwSmJoFvvbr5_K4UJpRXlTq-k/edit#
 
-      // Make copies of orderColumn and ascOrDesc.  Append the id column to the end of it.
-      const isArray = Array.isArray(orderColumn);
-      if (isArray) {
-        orderColumn = [...orderColumn];
-        orderColumn.push(idColumn);
-        ascOrDesc = [...ascOrDesc];
-        // Reuse the last column's ascOrDesc for the id columns.
-        ascOrDesc.push(ascOrDesc[ascOrDesc.length - 1]);
-      } else {
-        orderColumn = [orderColumn, idColumn];
-        ascOrDesc = [ascOrDesc, ascOrDesc];
-      }
-      columnValue = [...columnValue];
-      columnValue.push(id);
+      // Merge idColumn into a copy of orderColumn and ascOrDesc.
+      [orderColumn, ascOrDesc] = combineOrderColumnAndAscOrDesc(orderColumn, idColumn, ascOrDesc);
 
       const filters = operateOverScalarOrArray({ OR: []}, orderColumn, (orderBy, index, prev) => {
         let orderDirection;
-        const values = columnValue;
         let currValue;
         if (index !== null) {
           orderDirection = ascOrDesc[index].toLowerCase();
-          currValue = values[index];
+          currValue = cursorValues[index];
         } else {
           orderDirection = ascOrDesc.toLowerCase();
-          currValue = values[0];
+          currValue = cursorValues[0];
         }
 
         // TODO - handle having vs where.
@@ -117,7 +160,7 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
         // TODO - add description for why.
         for (var i = 0; i < index; i++) {
           const columnName = formatColumnIfAvailable(orderColumn[i], formatColumnFn);
-          conditions[columnName] = { is: values[i] };
+          conditions[columnName] = { is: cursorValues[i] };
         }
         // The condition for the current index should use the comparator.
         const columnName = formatColumnIfAvailable(orderBy, formatColumnFn);
@@ -162,17 +205,15 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
 };
 
 const orderNodesBy = (nodesAccessor, { idColumn, orderColumn = 'id', ascOrDesc = 'asc', formatColumnFn }) => {
+  [orderColumn, ascOrDesc] = combineOrderColumnAndAscOrDesc(orderColumn, idColumn, ascOrDesc);
 
-  console.log(`orderColumn=${orderColumn}`);
   const initialValue = nodesAccessor.clone();
   const result = operateOverScalarOrArray(initialValue, orderColumn, (orderBy, index, prev) => {
     if (index !== null) {
       return prev.orderBy(formatColumnIfAvailable(orderBy, formatColumnFn), ascOrDesc[index]);
     }
     return prev.orderBy(formatColumnIfAvailable(orderBy, formatColumnFn), ascOrDesc);
-  }, (prev, isArray) => (isArray
-    ? prev.orderBy(formatColumnIfAvailable(idColumn, formatColumnFn), ascOrDesc[ascOrDesc.length - 1])
-    : prev.orderBy(formatColumnIfAvailable(idColumn, formatColumnFn), ascOrDesc)));
+  });
   return result;
 };
 
