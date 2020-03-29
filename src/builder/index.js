@@ -14,18 +14,18 @@ const applyCursorsToNodes = (
     removeNodesBeforeAndIncluding,
     removeNodesAfterAndIncluding,
   }, {
-    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
   },
 ) => {
   let nodesAccessor = allNodesAccessor;
   if (after) {
     nodesAccessor = removeNodesBeforeAndIncluding(nodesAccessor, after, {
-      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
     });
   }
   if (before) {
     nodesAccessor = removeNodesAfterAndIncluding(nodesAccessor, before, {
-      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
     });
   }
   return nodesAccessor;
@@ -51,11 +51,11 @@ const nodesToReturn = async (
   {
     before, after, first, last,
   }, {
-    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
   },
 ) => {
   const orderedNodesAccessor = orderNodesBy(allNodesAccessor, {
-    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
   });
   const nodesAccessor = applyCursorsToNodes(
     orderedNodesAccessor,
@@ -64,7 +64,7 @@ const nodesToReturn = async (
       removeNodesBeforeAndIncluding,
       removeNodesAfterAndIncluding,
     }, {
-      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
     },
   );
   let hasNextPage = !!before;
@@ -72,7 +72,7 @@ const nodesToReturn = async (
   let nodes = [];
   if (first) {
     if (first < 0) throw new Error('`first` argument must not be less than 0');
-    nodes = await removeNodesFromEnd(nodesAccessor, first + 1, { idColumn, orderColumn, ascOrDesc, formatColumnFn });
+    nodes = await removeNodesFromEnd(nodesAccessor, first + 1, { idColumn, orderColumn, ascOrDesc, formatColumnOptions });
     if (nodes.length > first) {
       hasNextPage = true;
       nodes = nodes.slice(0, first);
@@ -80,7 +80,7 @@ const nodesToReturn = async (
   }
   if (last) {
     if (last < 0) throw new Error('`last` argument must not be less than 0');
-    nodes = await removeNodesFromBeginning(nodesAccessor, last + 1, { idColumn, orderColumn, ascOrDesc, formatColumnFn });
+    nodes = await removeNodesFromBeginning(nodesAccessor, last + 1, { idColumn, orderColumn, ascOrDesc, formatColumnOptions });
     if (nodes.length > last) {
       hasPreviousPage = true;
       nodes = nodes.slice(1);
@@ -110,7 +110,7 @@ const apolloCursorPaginationBuilder = ({
   opts = {},
 ) => {
   const {
-    idColumn, isAggregateFn, formatColumnFn, skipTotalCount = false, modifyEdgeFn,
+    idColumn, isAggregateFn, formatColumnOptions, skipTotalCount = false, modifyEdgeFn, getTotal = true
   } = opts;
   let {
     orderColumn, ascOrDesc,
@@ -122,9 +122,12 @@ const apolloCursorPaginationBuilder = ({
     ascOrDesc = orderDirection;
   }
 
-  if (formatColumnFn && formatColumnFn(orderColumn) === orderColumn) {
-    console.warn(`orderBy ${orderColumn} should not equal its formatted counterpart: ${formatColumnFn(orderColumn)}.`);
-    console.warn('This may cause issues with cursors being generated properly.');
+  if (formatColumnOptions && formatColumnOptions.formatColumnNameFn) {
+    const formattedColumnName = formatColumnOptions.columnFormatter(orderColumn);
+    if (formatColumnName === orderColumn) {
+      console.warn(`orderBy ${orderColumn} should not equal its formatted counterpart: ${formatColumnName}.`);
+      console.warn('This may cause issues with cursors being generated properly.');
+    }
   }
 
   const { nodes, hasPreviousPage, hasNextPage } = await nodesToReturn(
@@ -140,18 +143,21 @@ const apolloCursorPaginationBuilder = ({
     }, {
       before, after, first, last,
     }, {
-      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+      idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
     },
   );
 
-  const totalCount = !skipTotalCount && await getNodesLength(allNodesAccessor, {
-    getNodesLength,
-  });
+  let totalCount = 0;
+  if (getTotal) {
+    totalCount = !skipTotalCount && await getNodesLength(allNodesAccessor, {
+      getNodesLength,
+    });
+  }
 
   let edges = convertNodesToEdges(nodes, {
     before, after, first, last,
   }, {
-    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+    idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
   });
   if (modifyEdgeFn) {
     edges = edges.map(edge => modifyEdgeFn(edge));
