@@ -329,7 +329,7 @@ describe('test where clause', () => {
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 'my test/' or (\"first_id\" = 'my test/' and \"backup_id\" > 1)) order by \"first_id\" desc, \"backup_id\" desc limit 8");
+      .toEqual("select * from ((select \"metric\" from \"mytable\" where (\"first_id\" > 'my test/' or (\"first_id\" = 'my test/' and \"backup_id\" > 1)) order by \"first_id\" asc, \"backup_id\" asc limit 8) as \"last_subquery\") as \"query\",  as \"query_strings_output\" order by \"first_id\" desc, \"backup_id\" desc")
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
@@ -344,7 +344,7 @@ describe('test where clause', () => {
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"backup_id\" > 1)) order by \"first_id\" desc, \"backup_id\" desc limit 8")
+      .toEqual("select * from ((select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"backup_id\" > 1)) order by \"first_id\" asc, \"backup_id\" asc limit 8) as \"last_subquery\") as \"query\",  as \"query_strings_output\" order by \"first_id\" desc, \"backup_id\" desc");
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
 
@@ -481,7 +481,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" > 4) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"backup_id\" > 1)) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc limit 4");
+        .toEqual("select * from ((select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < 3) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" > 4) or (\"first_id\" = 2 and \"second_id\" = 3 and \"third_id\" = 4 and \"backup_id\" > 1)) order by \"first_id\" asc, \"second_id\" desc, \"third_id\" asc, \"backup_id\" asc limit 4) as \"last_subquery\") as \"query\",  as \"query_strings_output\" order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
@@ -497,7 +497,7 @@ describe('test where clause', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < true) or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" > 'my test/') or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" = 'my test/' and \"backup_id\" > 1)) order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc limit 4")
+        .toEqual("select * from ((select \"metric\" from \"mytable\" where (\"first_id\" > 2 or (\"first_id\" = 2 and \"second_id\" < true) or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" > 'my test/') or (\"first_id\" = 2 and \"second_id\" = true and \"third_id\" = 'my test/' and \"backup_id\" > 1)) order by \"first_id\" asc, \"second_id\" desc, \"third_id\" asc, \"backup_id\" asc limit 4) as \"last_subquery\") as \"query\",  as \"query_strings_output\" order by \"first_id\" desc, \"second_id\" asc, \"third_id\" desc, \"backup_id\" desc");
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
 
@@ -690,7 +690,7 @@ describe('having', () => {
     await paginate(wrapKnex(createTestKnex(), queryStrings), cursorInput, 'backupId');
     expect(queryStrings.length).toEqual(2);
     expect(queryStrings[0])
-      .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc limit 8");
+      .toEqual("select * from ((select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" asc, \"backup_id\" asc limit 8) as \"last_subquery\") as \"query\",  as \"query_strings_output\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" desc, \"backup_id\" desc")
     // TODO - The total results are wrong when there are group bys.
     expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
   });
@@ -845,7 +845,7 @@ describe('having', () => {
       await paginate(wrapKnex(query, queryStrings), cursorInput, 'backupId');
       expect(queryStrings.length).toEqual(2);
       expect(queryStrings[0])
-        .toEqual("select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" < 3) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" > 4) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" = 4 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" desc, \"sum(my_metric2)\" asc, \"third_id\" desc, \"backup_id\" desc limit 4")
+        .toEqual("select * from ((select \"metric\" from \"mytable\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" < 3) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" > 4) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" = 4 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" asc, \"sum(my_metric2)\" desc, \"third_id\" asc, \"backup_id\" asc limit 4) as \"last_subquery\") as \"query\",  as \"query_strings_output\" having ((\"sum(my_metric1)\" > 2 or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" < 3) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" > 4) or (\"sum(my_metric1)\" = 2 and \"sum(my_metric2)\" = 3 and \"third_id\" = 4 and \"backup_id\" > 1))) order by \"sum(my_metric1)\" desc, \"sum(my_metric2)\" asc, \"third_id\" desc, \"backup_id\" desc")
       // TODO - The total results are wrong when there are group bys.
       expect(queryStrings[1]).toEqual("select \"metric\", count(*) from \"mytable\"");
     });
