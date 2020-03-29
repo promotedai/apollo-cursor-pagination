@@ -54,9 +54,9 @@ const convertNodesToEdges = (nodes, _, {
   };
 });
 
-const formatColumnIfAvailable = (column, formatColumnFn) => {
-  if (formatColumnFn) {
-    return formatColumnFn(column);
+const formatColumnIfAvailable = (column, formatColumnOptions, forWhereClause) => {
+  if (formatColumnOptions && formatColumnOptions.columnFormatter) {
+    return formatColumnOptions.columnFormatter(column, forWhereClause);
   }
   return column;
 };
@@ -120,7 +120,7 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
   };
   return (nodesAccessor, cursorOfInitialNode, {
     idColumn = 'id',
-    orderColumn, ascOrDesc, isAggregateFn, formatColumnFn,
+    orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
   }) => {
     const cursorValues = getDataFromCursor(cursorOfInitialNode);
 
@@ -149,11 +149,11 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
         // For each pass, we want the previous columns to match their value.
         // TODO - add description for why.
         for (var i = 0; i < index; i++) {
-          const columnName = formatColumnIfAvailable(orderColumn[i], formatColumnFn);
+          const columnName = formatColumnIfAvailable(orderColumn[i], formatColumnOptions, true);
           conditions[columnName] = { is: cursorValues[i] };
         }
         // The condition for the current index should use the comparator.
-        const columnName = formatColumnIfAvailable(orderBy, formatColumnFn);
+        const columnName = formatColumnIfAvailable(orderBy, formatColumnOptions, true);
 
         // We treat NULL as 0.  If we're trying to reach values that are
         // not possible < NULL or > NOT NULL, skip that condition (since it's an OR).
@@ -183,7 +183,7 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
 
       const areAnyColumnsAggregates =
         orderColumn.reduce((accumulator, currentColumn) => accumulator || isAggregateFn(currentColumn), false);
-      const opts = {};
+      const opts = {...formatColumnOptions};
       if (areAnyColumnsAggregates) {
         opts.having = true;
       }
@@ -194,15 +194,15 @@ const buildRemoveNodesFromBeforeOrAfter = (beforeOrAfter) => {
   };
 };
 
-const orderNodesBy = (nodesAccessor, { idColumn, orderColumn = 'id', ascOrDesc = 'asc', formatColumnFn }) => {
+const orderNodesBy = (nodesAccessor, { idColumn, orderColumn = 'id', ascOrDesc = 'asc', formatColumnOptions }) => {
   [orderColumn, ascOrDesc] = combineOrderColumnAndAscOrDesc(orderColumn, idColumn, ascOrDesc);
 
   const initialValue = nodesAccessor.clone();
   const result = operateOverScalarOrArray(initialValue, orderColumn, (orderBy, index, prev) => {
     if (index !== null) {
-      return prev.orderBy(formatColumnIfAvailable(orderBy, formatColumnFn), ascOrDesc[index]);
+      return prev.orderBy(formatColumnIfAvailable(orderBy, formatColumnOptions), ascOrDesc[index]);
     }
-    return prev.orderBy(formatColumnIfAvailable(orderBy, formatColumnFn), ascOrDesc);
+    return prev.orderBy(formatColumnIfAvailable(orderBy, formatColumnOptions), ascOrDesc);
   });
   return result;
 };
@@ -229,7 +229,7 @@ const removeNodesAfterAndIncluding = buildRemoveNodesFromBeforeOrAfter('after');
 // It must remove nodes from the result set starting from the beginning until it's of size `length`.
 // e.g. let [A, B, C, D] be the `resultSet`
 // removeNodesFromBeginning(resultSet, 3) should return [B, C, D]
-const removeNodesFromBeginning = async (nodesAccessor, last, { idColumn, orderColumn, ascOrDesc, formatColumnFn }) => {
+const removeNodesFromBeginning = async (nodesAccessor, last, { idColumn, orderColumn, ascOrDesc, formatColumnOptions }) => {
 
   // Flip the sort ordering.
   const inverseAscOrDesc = operateOverScalarOrArray([], ascOrDesc,
@@ -237,7 +237,7 @@ const removeNodesFromBeginning = async (nodesAccessor, last, { idColumn, orderCo
 
   // TODO - I don't know how this works.
   //  We don't need the idColumn
-  const subquery = orderNodesBy(nodesAccessor.clone().clearOrder(), { idColumn, orderColumn, ascOrDesc: inverseAscOrDesc, formatColumnFn}).limit(last);
+  const subquery = orderNodesBy(nodesAccessor.clone().clearOrder(), { idColumn, orderColumn, ascOrDesc: inverseAscOrDesc, formatColumnOptions}).limit(last);
 
   const result = nodesAccessor.clone().from(subquery.as('last_subquery')).clearSelect().clearWhere();
 

@@ -107,15 +107,17 @@ function paginate(baseQuery, cursorInput, idName) {
     isAggregateFn: (column) => {
       return column == "myMetric1" || column == "myMetric2" || column == "myMetric3";;
     },
-    formatColumnFn: column => {
-      if (column == "myMetric1") {
-        return "sum(myMetric1)";
-      } else if (column == "myMetric2") {
-        return "sum(my_metric2)";
-      } else if (column == "myMetric3") {
-        return "custom_forth_column";
-      }
-      return cachedSnakecase(column);
+    formatColumnOptions: {
+      columnFormatter: column => {
+        if (column == "myMetric1") {
+          return "sum(myMetric1)";
+        } else if (column == "myMetric2") {
+          return "sum(my_metric2)";
+        } else if (column == "myMetric3") {
+          return "custom_forth_column";
+        }
+        return cachedSnakecase(column);
+      },
     },
   });
 }
