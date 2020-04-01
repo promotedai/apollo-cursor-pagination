@@ -3920,7 +3920,7 @@ kleur@^3.0.3:
 
 "knex-graphql-filters@git://github.com/promotedai/knex-graphql-filters.git":
   version "2.4.0"
-  resolved "git://github.com/promotedai/knex-graphql-filters.git#41c5ea54a46dca1f614f93580fd8fc358784276c"
+  resolved "git://github.com/promotedai/knex-graphql-filters.git#95627692e8bd83d9e1ada38cb8e35fd5cb28d1e3"
   dependencies:
     lodash.get "^4.4.2"
     lodash.keys "^4.2.0"
