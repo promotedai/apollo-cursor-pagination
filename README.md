@@ -25,13 +25,13 @@ Run `yarn test tests/knex-implementation.test.js --watch`.
 
 You can run the adsmgr-api tests using a local version of the library by doing the following:
 
-1. Go to `apollo-cursor-pagination` directory and run `yarn link`.
+1. Go to `apollo-cursor-pagination` directory and run `npm link`.
 
-2. Go to `adsmgr-api` directory and run `yarn link apollo-cursor-pagination`.
+2. Go to `adsmgr-api` directory and run `npm link apollo-cursor-pagination`.
 
 3. Run tests.
 
-4. To reverse, call `yarn unlink` and `yarn unlink apollo-cursor-pagination` in the appropriate directory.
+4. To reverse, call `npm unlink` and `npm unlink apollo-cursor-pagination` in the appropriate directory.
 
 # Here are the original README notes.
 
