@@ -1,6 +1,6 @@
 {
   "name": "apollo-cursor-pagination",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Relay's Connection implementation for Apollo Server GraphQL library",
   "main": "src/index.js",
   "repository": "https://github.com/promotedai/apollo-cursor-pagination",
