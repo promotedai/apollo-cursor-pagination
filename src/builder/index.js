@@ -125,7 +125,7 @@ const apolloCursorPaginationBuilder = ({
   if (formatColumnOptions && formatColumnOptions.columnFormatter) {
     const formattedColumnName = formatColumnOptions.columnFormatter(orderColumn);
     if (formattedColumnName === orderColumn) {
-      console.warn(`orderBy ${orderColumn} should not equal its formatted counterpart: ${formatColumnName}.`);
+      console.warn(`orderBy ${orderColumn} should not equal its formatted counterpart: ${formattedColumnName}.`);
       console.warn('This may cause issues with cursors being generated properly.');
     }
   }
