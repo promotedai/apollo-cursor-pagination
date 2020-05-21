@@ -110,7 +110,7 @@ const apolloCursorPaginationBuilder = ({
   opts = {},
 ) => {
   const {
-    idColumn, isAggregateFn, formatColumnOptions, skipTotalCount = false, modifyEdgeFn, getTotal = true
+    idColumn, isAggregateFn, formatColumnOptions, skipTotalCount = false, modifyNodeFn, getTotal = true
   } = opts;
   let {
     orderColumn, ascOrDesc,
@@ -122,15 +122,15 @@ const apolloCursorPaginationBuilder = ({
     ascOrDesc = orderDirection;
   }
 
-  if (formatColumnOptions && formatColumnOptions.formatColumnNameFn) {
+  if (formatColumnOptions && formatColumnOptions.columnFormatter) {
     const formattedColumnName = formatColumnOptions.columnFormatter(orderColumn);
-    if (formatColumnName === orderColumn) {
+    if (formattedColumnName === orderColumn) {
       console.warn(`orderBy ${orderColumn} should not equal its formatted counterpart: ${formatColumnName}.`);
       console.warn('This may cause issues with cursors being generated properly.');
     }
   }
 
-  const { nodes, hasPreviousPage, hasNextPage } = await nodesToReturn(
+  let { nodes, hasPreviousPage, hasNextPage } = await nodesToReturn(
     allNodesAccessor,
     {
       removeNodesBeforeAndIncluding,
@@ -154,14 +154,15 @@ const apolloCursorPaginationBuilder = ({
     });
   }
 
+  if (modifyNodeFn) {
+    nodes = nodes.map(node => modifyNodeFn(node));
+  }
   let edges = convertNodesToEdges(nodes, {
     before, after, first, last,
   }, {
     idColumn, orderColumn, ascOrDesc, isAggregateFn, formatColumnOptions,
   });
-  if (modifyEdgeFn) {
-    edges = edges.map(edge => modifyEdgeFn(edge));
-  }
+
 
   const startCursor = edges[0] && edges[0].cursor;
   const endCursor = edges[edges.length - 1] && edges[edges.length - 1].cursor;

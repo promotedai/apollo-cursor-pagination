@@ -32,6 +32,14 @@ const getDataFromCursor = (cursor) => {
   return decodedCursor.split(SEPARATION_TOKEN).map(v => JSON.parse(decodeURIComponent(v)));
 };
 
+const getNodeValue = (node, fieldPath) => {
+  const fieldParts = fieldPath.split(".");
+  const nodeValue = fieldParts.reduce((aggregator, field) => {
+    return aggregator?.[field]
+  }, node)
+  return nodeValue;
+}
+
 // Receives a list of nodes and returns it in edge form:
 // {
 //   cursor
@@ -43,7 +51,7 @@ const convertNodesToEdges = (nodes, _, {
 }) => nodes.map((node) => {
   orderColumn = combineOrderColumn(orderColumn, idColumn);
   const cursor = encode(operateOverScalarOrArray('', orderColumn, (orderBy, index, prev) => {
-    const nodeValue = node[orderBy];
+    const nodeValue = getNodeValue(node, orderBy);
     const result = `${prev}${index ? SEPARATION_TOKEN : ''}${encodeURIComponent(JSON.stringify(nodeValue))}`;
     return result;
   }));
@@ -106,8 +114,7 @@ const combineOrderColumnAndAscOrDesc = (orderColumn, idColumn, ascOrDesc) => {
   });
 
   if (resultOrderColumns.length != resultAscOrDesc.length) {
-    console.log(`resultOrderColumns=${resultOrderColumns}`);
-    console.log(`resultAscOrDesc=${resultAscOrDesc}`);
+    console.warn(`order and ascOrDesc lengths do not match, resultOrderColumns=${resultOrderColumns} resultAscOrDesc=${resultAscOrDesc}`);
   }
   return [resultOrderColumns, resultAscOrDesc];
 }
@@ -230,7 +237,6 @@ const removeNodesAfterAndIncluding = buildRemoveNodesFromBeforeOrAfter('after');
 // e.g. let [A, B, C, D] be the `resultSet`
 // removeNodesFromBeginning(resultSet, 3) should return [B, C, D]
 const removeNodesFromBeginning = async (nodesAccessor, last, { idColumn, orderColumn, ascOrDesc, formatColumnOptions }) => {
-
   // Flip the sort ordering.
   const inverseAscOrDesc = operateOverScalarOrArray([], ascOrDesc,
     (orderDirection, index, prev) => prev.concat(orderDirection === 'asc' ? 'desc' : 'asc'));
