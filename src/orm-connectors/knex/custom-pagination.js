@@ -35,7 +35,7 @@ const getDataFromCursor = (cursor) => {
 const getNodeValue = (node, fieldPath) => {
   const fieldParts = fieldPath.split(".");
   const nodeValue = fieldParts.reduce((aggregator, field) => {
-    return aggregator?.[field]
+    return aggregator && aggregator[field]
   }, node)
   return nodeValue;
 }
